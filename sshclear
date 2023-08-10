@@ -1,0 +1,16 @@
+#!/bin/bash
+if [[ $1 != "" ]]; then
+	org=("$@")
+	sorted=($(printf '%s\n' "${org[@]}"|sort -ru ))
+	for var in $sorted; do
+		if [ -n "$var" ] && [ "$var" -eq "$var" ] 2>/dev/null; then
+			sed -i. "${var}"d ~/.ssh/known_hosts
+		else
+			echo "$var is not a number. Try again."
+		fi
+	done
+else
+	echo "Usage: $(basename "$0") Line numbers to delete.
+
+	IE: $(basename "$0") 12 34 2"
+fi

@@ -1,0 +1,323 @@
+#!/bin/bash
+q=16
+max=40M
+Interlace=0
+bitrate=0
+vfenabled=0
+vf=""
+flags=""
+while getopts ":q:r:21lm:nocb:ivs:h8w:7dt:" opt; do
+	case $opt in
+		h)
+			echo "usage: br [options] infile [outfile]
+
+Default will add a suffix of -br to output file in the same location as source if there is no output specified.
+
+	-q	Sets the quality of output. 16 is the default, and is visually lossless. Higher the number, the more it will be compressed.
+			This is the same as -crf in FFMPEG.
+
+	-c	Crops the image to 1920x1080. Usefull for encoding 1:85 flat DCP video to Blu-Ray
+
+	-b	Set bitrate for video. IE \"-b 25M\" will make your bitrate 25 Mbps
+
+	-l	Resize and Letterbox to 1080p
+
+	-m	Set Max bitrate. Default is 40M. Use -d for DVD-R.
+
+	-d	If you intend on making Blu-rays that are burned onto DVD-r's. This sets the max bitrate to 17M instead of the norm of 40M
+
+	-2	Use with -b to make a 2 pass
+
+	-n	Don't make Audio files
+
+	-7	Make output 720p
+
+	-8	Crop frame to 185
+
+	-o	Open GOP
+
+	-i	Make the output Interlaced. It will detect if source is interlaced, and set this automatically if it does.
+
+	-t	Enable Timecode burn-in
+
+	-w	Add watermark to video. like this \"-w /Volumes/MyDrive/Watermark.png\" -- Can't have spaces in the command!
+
+	-s	Delay start by this many seconds. IE \"-S 10\" will start the encode 10 seconds into the source.
+
+	-v	Enable very slow profile for x264.
+
+
+
+
+
+			"
+			exit 1
+			;;
+		q)
+			echo "Setting Quality to $OPTARG"
+			q=$OPTARG
+			;;
+		c)
+			echo "Cropping enabled from higher than 1080 res."
+			# ffextra="-vf scale=w=1920:h=1080:force_original_aspect_ratio=1,pad=1920:1080:(ow-iw)/2:(oh-ih)/2"
+			vfenabled=1
+			vf="${vf}scale=w=1920:h=1080:force_original_aspect_ratio=1,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,"
+			;;
+		l)
+			echo "Making video fit to 1080p and Letterboxing"
+			# ffextra="-vf scale=1920:-1,pad=iw:1080:0:(oh-ih)/2"
+			vfenabled=1
+			vf="${vf}scale=1920:-1,pad=iw:1080:0:(oh-ih)/2,"
+			;;
+		r)
+			echo "Setting Res to $OPTARG"
+			ffextra="-s $OPTARG $ffextra"
+			;;
+		b)
+			echo "Setting Bitrate to $OPTARG"
+			ffextra="-b:v ${OPTARG} $ffextra"
+			bitrate=1
+			bitr="${OPTARG}"
+			;;
+		m)
+			echo "Setting Max Bitrate to $OPTARG"
+			max=$OPTARG
+			;;
+		1)
+			echo "2 Pass compression enabled, Skipping pass 1!!"
+			nofirstpass=1
+			;;
+
+		2)
+			echo "2 Pass compression enabled!!"
+			twopass=1
+			;;
+		n)
+			noaudio=1
+			;;
+		o)
+			echo "Enabling Open-GOP"
+			ffextra="-flags -cgop $ffextra"
+			;;
+		7)
+			is720=1
+			;;
+		8)
+			echo "cropping to 185 aspect"
+			vfenabled=1
+			vf="${vf}crop=1920:804,pad=1920:1080:0:130,"
+			# ffextra="-vf crop=1920:804,pad=1920:1080:0:130 $ffextra"
+			;;
+		i)
+			echo "Making sure it stays interlaced."
+			x2extra=":tff=1"
+			ffextra="-flags +ildct+ilme -top 1 $ffextra"
+			Interlace=1
+			;;
+		d)
+			echo "Compressing for DVD-R."
+			max=20M
+			;;
+		t)
+			t=1
+			;;
+		w)
+			echo "Adding Watermark $OPTARG"
+			# ffextraw="-i $OPTARG -filter_complex overlay,crop=1920:1080"
+			ffextraw="-i $OPTARG -filter_complex overlay,crop=1920:1080,pad=1920:1080:0:130"
+			watermark=1
+			;;
+
+		s)
+			echo "Starting $OPTARG seconds in source"
+			ffextrapre="-ss $OPTARG $ffextrapre"
+			;;
+		v)
+			echo "Setting very slow profile for x264."
+			ffextra="-preset veryslow $ffextra"
+			;;
+		\?)
+			echo "Invalid option: -$OPTARG" >&2
+			exit 1
+			;;
+		esac
+	done
+
+shift $((OPTIND-1))
+if [[ "$2" = "" ]]; then
+	if [[ $watermark = 1 ]]; then
+		out="${1%.*}-br-Watermarked.m4v"
+	elif [[ $bitrate = 1 ]]; then
+		out="${1%.*}-br-v$bitr.m4v"
+	else
+		out="${1%.*}-br-crf$q.m4v"
+	fi
+	echo "No target specified. Using source with -br appended. $2"
+else
+	if [[ $watermark = 1 ]]; then
+		out="${2%.*}-Watermarked.m4v"
+	else
+		out="${2%.*}.m4v"
+	fi
+fi
+
+infile="$1"
+fps=$(mediainfo --Inform="Video;%FrameRate%" "$infile" | awk '{printf("%d\n",$1 + 0.5)}')
+fpsr=$(mediainfo --Inform="Video;%FrameRate%" "$infile" )
+# iframe=$(( $fps * 2 ))
+iframe=$(( fps * 1 ))
+# iframe= "$fps"
+echo "Detected I frame distance is \"$fps\""
+
+if [[ $(mediainfo "$infile" | grep Audio) = "" ]]; then
+	noaudio=1
+fi
+
+if [[ $fps = 25 ]]; then
+	if [[ $(ffmpeg -i "$infile" 2>&1 | grep x720) != "" ]]; then
+		ffextra="-r 60 $ffextra"
+	fi
+fi
+if [[ $is720 = 1 ]]; then
+	if { [[ $fps = 30 ]] || [[ $fps = 25 ]]; } && [[ $(mediainfo "$infile" | grep -m 1 "Scan type" | sed -e 's/.*:\ //') = "Interlaced" ]]; then
+		echo "Detected Interlaced Source!!!!"
+		echo "Resizing to 720p and Deinterlacing to double frame rate"
+		if [[ $( mediainfo --Inform="Video;%ScanOrder%" "$infile" ) = "BFF" ]]; then
+			# ffextra="$ffextra -vf yadif=1:1,scale=1280:720"
+			vfenabled=1
+			vf="${vf}yadif=1:1,scale=1280:720,"
+		else
+			ffextra="$ffextra -vf yadif=1:0,scale=1280:720"
+			vfenabled=1
+			vf="${vf}yadif=1:0,scale=1280:720,"
+		fi
+
+		iframe=$(( iframe * 2 ))
+		echo "Doubling frame rate... I frame distance is now \"$iframe\""
+	else
+		echo "Resizing to 720p"
+		ffextra="-s 1280x720 $ffextra"
+	fi
+
+fi
+if [[ $t = 1 ]]; then
+	if [[ $(ffmpeg -i "$infile" 2>&1 | awk '$1 ~ /^timecode/ {print $NF}') != "" ]]; then
+		tc="$(ffmpeg $ffextrapre -i "$infile" 2>&1 | awk '$1 ~ /^timecode/ {print $NF}')"
+		tc=${tc//:/\\:}
+	else
+		tc='00:00:00:00'
+		tc=${tc//:/\\:}
+	fi
+fi
+echo " \$infile=$infile"
+echo " \$2=$2"
+echo " \$out=$out"
+echo " \$3=$3"
+echo "Extra x264 options: $x264opts"
+if [[ $vfenabled = 1 ]]; then
+	echo "Video Filters are enabled"
+fi
+echo "vf is ${vf%?}"
+if [[ $bitrate = 1 ]]; then
+	echo "Bitrate is $bitr"
+else
+	ffextra="-crf $q $ffextra"
+	twopass=0
+	echo "Quality is $q"
+fi
+if [[ $(mediainfo --Inform="Audio;%Channels%" "$infile") -gt 2 ]]; then
+	echo "Audio is greater than Stereo, Raising audio bitrate"
+	ffaex="-b:a 384k"
+else
+	ffaex="-b:a 192k"
+fi
+if { [[ $fps = 30 ]] || [[ $fps = 25 ]]; } && [[ $( mediainfo --Inform="Video;%ScanType%" "$infile" ) != "Progressive" ]] && [[ $is720 != 1 ]]; then
+	echo "Detected Interlaced Source!!!!"
+	echo "Making sure it stays interlaced."
+	if [[ $( mediainfo --Inform="Video;%ScanOrder%" "$infile" ) = "BFF" ]]; then
+		ffextra="-flags +ildct+ilme -top 0 $ffextra"
+		x2extra=":bff=1"
+		Interlace=1
+	else
+		ffextra="-flags +ildct+ilme -top 1 $ffextra"
+		x2extra=":tff=1"
+		Interlace=1
+	fi
+elif { [[ $fps = 30 ]] || [[ $fps = 25 ]]; } && [[ $Interlace = 0 ]]; then
+	echo "Didn not Detect Interlaced. Will encode Fake Interlaced..."
+fi
+
+if [ -e "${out%.*}.h264" ]; then
+	rm "${out%.*}.h264" "${out%.*}.m4v"
+fi
+echo "Extra ffmpeg options: $ffextrapre $ffextra"
+echo "Extra x264 options: $x2extra"
+outtemp="/tmp/${out##*/}"
+
+
+if [[ $t = 1 ]]; then
+	if [[ $twopass != 1 ]]; then
+		echo "ffmpeg $ffextrapre -i \"$infile\" -vf \"${vf}drawtext=fontfile=/Library/Fonts/AppleGothic.ttf: text='$(basename \"$infile\") ': timecode='$tc': r=$fpsr: x=(w-tw)/2: y=h-(2*lh): fontcolor=white: box=1: boxcolor=0x00000000@1\" -pix_fmt yuv420p -an -y -metadata xmp=\"\" -loglevel verbose  -bluray-compat 1 -x264opts colorprim=bt709:transfer=bt709:colormatrix=bt709\"$x2extra\" -maxrate:v \"$max\" -g $iframe $ffextra -bufsize:v 30M -level 4.1 -slices 4 -f h264 -aspect 16:9 \"${out%.*}.m4v\""
+		ffmpeg $ffextrapre -i "$infile" -vf "${vf}drawtext=fontfile=/Library/Fonts/AppleGothic.ttf: text='$(basename "$infile") ': timecode='$tc': r=$fpsr: x=(w-tw)/2: y=h-(2*lh): fontcolor=white: box=1: boxcolor=0x00000000@1" -pix_fmt yuv420p -an -y -metadata xmp="" -loglevel verbose  -bluray-compat 1 -x264opts colorprim=bt709:transfer=bt709:colormatrix=bt709"$x2extra" -maxrate:v "$max" -g $iframe $ffextra -bufsize:v 30M -level 4.1 -slices 4 -f h264 -aspect 16:9 "${out%.*}.m4v"
+		if [[ $noaudio != 1 ]]; then
+			ffmpeg $ffextrapre -i "$infile" "${out%.*}.ac3" -vn $ffaex -y "${out%.*}.m4a" -map 0:a -c pcm_s24le -rf64 auto "${out%.*}.wav"
+		fi
+	else
+		if [[ $nofirstpass != 1 ]]; then
+			echo "Pass 1"
+			echo "ffmpeg $ffextrapre -i \"$infile\" -vf \"${vf}drawtext=fontfile=/Library/Fonts/AppleGothic.ttf: text='$(basename \"$infile\") ': timecode='$tc': r=$fpsr: x=(w-tw)/2: y=h-(2*lh): fontcolor=white: box=1: boxcolor=0x00000000@1\" -pix_fmt yuv420p -an -y -metadata xmp=\"\" -loglevel verbose  -bluray-compat 1 -x264opts colorprim=bt709:transfer=bt709:colormatrix=bt709\"$x2extra\" -maxrate:v \"$max\" -g $iframe $ffextra -bufsize:v 30M -level 4.1 -slices 4 -f h264 -aspect 16:9 -pass 1 -passlogfile \"${out%.*}.tmp\" \"${out%.*}.m4v\""
+			ffmpeg $ffextrapre -i "$infile" -vf "${vf}drawtext=fontfile=/Library/Fonts/AppleGothic.ttf: text='$(basename "$infile") ': timecode='$tc': r=$fpsr: x=(w-tw)/2: y=h-(2*lh): fontcolor=white: box=1: boxcolor=0x00000000@1" -pix_fmt yuv420p -an -y -metadata xmp="" -loglevel verbose  -bluray-compat 1 -x264opts colorprim=bt709:transfer=bt709:colormatrix=bt709"$x2extra" -maxrate:v "$max" -g $iframe $ffextra -bufsize:v 30M -level 4.1 -slices 4 -f h264 -aspect 16:9 -pass 1 -passlogfile "${out%.*}.tmp" "${out%.*}.m4v"
+
+		fi
+		echo "Pass 2"
+		echo "ffmpeg $ffextrapre -i \"$infile\" -vf \"${vf}drawtext=fontfile=/Library/Fonts/AppleGothic.ttf: text='$(basename \"$infile\") ': timecode='$tc': r=$fpsr: x=(w-tw)/2: y=h-(2*lh): fontcolor=white: box=1: boxcolor=0x00000000@1\" -pix_fmt yuv420p -an -y -metadata xmp=\"\" -loglevel verbose  -bluray-compat 1 -x264opts colorprim=bt709:transfer=bt709:colormatrix=bt709\"$x2extra\" -maxrate:v \"$max\" -g $iframe $ffextra -bufsize:v 30M -level 4.1 -slices 4 -f h264 -aspect 16:9 -pass 2 -passlogfile \"${out%.*}.tmp\" \"${out%.*}.m4v\""
+		ffmpeg $ffextrapre -i "$infile" -vf "${vf}drawtext=fontfile=/Library/Fonts/AppleGothic.ttf: text='$(basename "$infile") ': timecode='$tc': r=$fpsr: x=(w-tw)/2: y=h-(2*lh): fontcolor=white: box=1: boxcolor=0x00000000@1" -pix_fmt yuv420p -an -y -metadata xmp="" -loglevel verbose  -bluray-compat 1 -x264opts colorprim=bt709:transfer=bt709:colormatrix=bt709"$x2extra" -maxrate:v "$max" -g $iframe $ffextra -bufsize:v 30M -level 4.1 -slices 4 -f h264 -aspect 16:9 -pass 2 -passlogfile "${out%.*}.tmp" "${out%.*}.m4v"
+		if [[ $noaudio != 1 ]]; then
+			ffmpeg $ffextrapre -i "$infile" "${out%.*}.ac3" -vn $ffaex -y "${out%.*}.m4a" -map 0:a -c pcm_s24le -rf64 auto "${out%.*}.wav"
+		fi
+
+	fi
+
+elif { [[ $fps = 30 ]] || [[ $fps = 25 ]]; } && [[ $Interlace = 0 ]] && [[ $is720 != 1 ]]; then
+	echo "Progressive ${fpsr}P Video encoding with fake interlace!"
+	if [[ $twopass != 1 ]]; then
+		echo "ffmpeg $ffextrapre -i \"$infile\" $ffextraw -pix_fmt yuv420p -an -y $([[ $vf != "" ]] && echo "-vf ${vf%?}") -metadata xmp=\"\" -loglevel verbose  -bluray-compat 1 -x264opts fake-interlaced=1:colorprim=bt709:transfer=bt709:colormatrix=bt709\"$x2extra\" -maxrate:v \"$max\" -g $iframe $ffextra -bufsize:v 30M -level 4.1 -slices 4 -f h264 -aspect 16:9 \"${out%.*}.m4v\""
+		ffmpeg $ffextrapre -i "$infile" $ffextraw -pix_fmt yuv420p -an -y $([[ $vf != "" ]] && echo "-vf ${vf%?}") -metadata xmp="" -loglevel verbose  -bluray-compat 1 -x264opts fake-interlaced=1:colorprim=bt709:transfer=bt709:colormatrix=bt709"$x2extra" -maxrate:v "$max" -g $iframe $ffextra -bufsize:v 30M -level 4.1 -slices 4 -f h264 -aspect 16:9 "${out%.*}.m4v"
+		if [[ $noaudio != 1 ]]; then
+			ffmpeg $ffextrapre -i "$infile" "${out%.*}.ac3" -vn $ffaex -y "${out%.*}.m4a" -map 0:a -c pcm_s24le -rf64 auto "${out%.*}.wav"
+		fi
+	else
+		echo "Pass 1"
+		echo "ffmpeg $ffextrapre -i \"$infile\" $ffextraw -pix_fmt yuv420p -an -y $([[ $vf != "" ]] && echo "-vf ${vf%?}") -metadata xmp=\"\" -loglevel verbose  -bluray-compat 1 -x264opts fake-interlaced=1:colorprim=bt709:transfer=bt709:colormatrix=bt709\"$x2extra\" -maxrate:v \"$max\" -g $iframe $ffextra -bufsize:v 30M -level 4.1 -slices 4 -f h264 -aspect 16:9 -pass 1 -passlogfile \"${out%.*}.tmp\" \"${outtemp%.*}.m4v\""
+		ffmpeg $ffextrapre -i "$infile" $ffextraw -pix_fmt yuv420p -an -y $([[ $vf != "" ]] && echo "-vf ${vf%?}") -metadata xmp="" -loglevel verbose  -bluray-compat 1 -x264opts fake-interlaced=1:colorprim=bt709:transfer=bt709:colormatrix=bt709"$x2extra" -maxrate:v "$max" -g $iframe $ffextra -bufsize:v 30M -level 4.1 -slices 4 -f h264 -aspect 16:9 -pass 1 -passlogfile "${out%.*}.tmp" "${outtemp%.*}.m4v"
+		echo "Pass 2"
+		echo "ffmpeg $ffextrapre -i \"$infile\" $ffextraw -pix_fmt yuv420p -an -y $([[ $vf != "" ]] && echo "-vf ${vf%?}") -metadata xmp=\"\" -loglevel verbose  -bluray-compat 1 -x264opts fake-interlaced=1:colorprim=bt709:transfer=bt709:colormatrix=bt709\"$x2extra\" -maxrate:v \"$max\" -g $iframe $ffextra -bufsize:v 30M -level 4.1 -slices 4 -f h264 -aspect 16:9 -pass 2 -passlogfile \"${out%.*}.tmp\" \"${out%.*}.m4v\""
+		ffmpeg $ffextrapre -i "$infile" $ffextraw -pix_fmt yuv420p -an -y $([[ $vf != "" ]] && echo "-vf ${vf%?}") -metadata xmp="" -loglevel verbose  -bluray-compat 1 -x264opts fake-interlaced=1:colorprim=bt709:transfer=bt709:colormatrix=bt709"$x2extra" -maxrate:v "$max" -g $iframe $ffextra -bufsize:v 30M -level 4.1 -slices 4 -f h264 -aspect 16:9 -pass 2 -passlogfile "${out%.*}.tmp" "${out%.*}.m4v"
+		if [[ $noaudio != 1 ]]; then
+			ffmpeg $ffextrapre -i "$infile" "${out%.*}.ac3" -vn $ffaex -y "${out%.*}.m4a" -map 0:a -c pcm_s24le -rf64 auto "${out%.*}.wav"
+		fi
+		rm "${out%.*}.tmp"* "${outtemp%.*}.m4v"
+	fi
+
+else
+	if [[ $twopass != 1 ]]; then
+		echo "ffmpeg $ffextrapre -i \"$infile\" $ffextraw -pix_fmt yuv420p -an -y $([[ $vf != "" ]] && echo "-vf ${vf%?}") -metadata xmp=\"\" -loglevel verbose  -bluray-compat 1 -x264opts colorprim=bt709:transfer=bt709:colormatrix=bt709\"$x2extra\" -maxrate:v \"$max\" -g $iframe $ffextra -bufsize:v 30M -level 4.1 -slices 4 -f h264 -aspect 16:9 \"${out%.*}.m4v\""
+		ffmpeg $ffextrapre -i "$infile" $ffextraw -pix_fmt yuv420p -an -y $([[ $vf != "" ]] && echo "-vf ${vf%?}") -metadata xmp="" -loglevel verbose  -bluray-compat 1 -x264opts colorprim=bt709:transfer=bt709:colormatrix=bt709"$x2extra" -maxrate:v "$max" -g $iframe $ffextra -bufsize:v 30M -level 4.1 -slices 4 -f h264 -aspect 16:9 "${out%.*}.m4v"
+		if [[ $noaudio != 1 ]]; then
+			ffmpeg $ffextrapre -i "$infile" "${out%.*}.ac3" -vn $ffaex -y "${out%.*}.m4a" -map 0:a -c pcm_s24le -rf64 auto "${out%.*}.wav"
+		fi
+	else
+		echo "Pass 1"
+		echo "ffmpeg $ffextrapre -i \"$infile\" -pass:v 1 -passlogfile \"${out%.*}.tmp\" $ffextraw -pix_fmt yuv420p -an -y $([[ $vf != "" ]] && echo "-vf ${vf%?}") -metadata xmp=\"\" -loglevel verbose  -bluray-compat 1 -x264opts colorprim=bt709:transfer=bt709:colormatrix=bt709\"$x2extra\" -maxrate:v \"$max\" -g $iframe $ffextra -bufsize:v 30M -level 4.1 -slices 4 -f h264 -aspect 16:9 \"${outtemp%.*}.m4v\""
+		ffmpeg $ffextrapre -i "$infile" -pass:v 1 -passlogfile "${out%.*}.tmp" $ffextraw -pix_fmt yuv420p -an -y $([[ $vf != "" ]] && echo "-vf ${vf%?}") -metadata xmp="" -loglevel verbose  -bluray-compat 1 -x264opts colorprim=bt709:transfer=bt709:colormatrix=bt709"$x2extra" -maxrate:v "$max" -g $iframe $ffextra -bufsize:v 30M -level 4.1 -slices 4 -f h264 -aspect 16:9 /dev/null
+		echo "Pass 2"
+		echo "ffmpeg $ffextrapre -i \"$infile\" -pass:v 2 -passlogfile \"${out%.*}.tmp\" $ffextraw -pix_fmt yuv420p -an -y $([[ $vf != "" ]] && echo "-vf ${vf%?}") -metadata xmp=\"\" -loglevel verbose  -bluray-compat 1 -x264opts colorprim=bt709:transfer=bt709:colormatrix=bt709\"$x2extra\" -maxrate:v \"$max\" -g $iframe $ffextra -bufsize:v 30M -level 4.1 -slices 4 -f h264 -aspect 16:9 \"${out%.*}.m4v\""
+
+		ffmpeg $ffextrapre -i "$infile" -pass:v 2 -passlogfile "${out%.*}.tmp" $ffextraw -pix_fmt yuv420p -an -y $([[ $vf != "" ]] && echo "-vf ${vf%?}") -metadata xmp="" -loglevel verbose  -bluray-compat 1 -x264opts colorprim=bt709:transfer=bt709:colormatrix=bt709"$x2extra" -maxrate:v "$max" -g $iframe $ffextra -bufsize:v 30M -level 4.1 -slices 4 -f h264 -aspect 16:9 "${out%.*}.m4v"
+		if [[ $noaudio != 1 ]]; then
+			ffmpeg $ffextrapre -i "$infile" "${out%.*}.ac3" -vn $ffaex -y "${out%.*}.m4a" -map 0:a -c pcm_s24le -rf64 auto "${out%.*}.wav"
+		fi
+		rm "${out%.*}.tmp"* "${outtemp%.*}.m4v"
+	fi
+fi
+say "$(basename "$out") is done!"

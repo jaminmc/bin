@@ -1,0 +1,74 @@
+#!/bin/bash
+month=$(gdate -dnext-monday +%m)
+weeknum=$( expr $(gdate -dnext-monday +%V) - $(gdate +%V -d $(gdate -dnext-monday +%Y-%m-01)))
+if [[ $(gdate +%a -d $(gdate -dnext-monday +%Y-%m-01)) = 'Sun' ]] || [[ $(gdate +%a -d $(gdate -dnext-monday +%Y-%m-01)) = 'Mon' ]]; then
+	((weeknum++))
+fi
+weeknum=$(printf "%02d\n" $weeknum)
+week=$month-$weeknum
+mainfolder="$(realpath "$1")"
+if [ ! -d "$mainfolder" ]; then
+	echo -e "Oppps!!!! Forgot to specify folder!\nWill be using next week of $week.\nPress CTRL-C to cancel!"
+	sleep 10
+	mainfolder="$(realpath "/Volumes/Storage/PIJN/$week")"
+	if [ ! -d "$mainfolder" ]; then
+		echo "Folder $mainfolder does not exist.. Exiting!"
+		exit 1
+	fi
+	# exit 1
+fi
+
+cd "$mainfolder"/youtube/thumbs || ( echo "Usage: $(basename "$0") Week folder" ; exit 1 )
+mkdir -p "$mainfolder"/youtube/thumbs/all "$mainfolder"/salem/thumbs/all
+n=0
+tagged=()
+for i in *.jpg ; do
+	if [[ $( tag "$i" | grep '\tGreen' ) ]]; then
+		((n++))
+		tagged+=("$i")
+	fi
+done
+
+testdup=()
+for i in "${tagged[@]}"; do
+	testdup+=("${i%-*}.jpg")
+done
+dupe=$(IFS=$'\n' sort <<<"${testdup[*]}" | uniq -d; unset IFS)
+if [[ $dupe ]]; then
+	echo "Show $dupe was tagged multiple times!!!! Only select 1"
+	exit 1
+fi
+
+
+if [[ $n != 5 ]]; then
+	echo "There should be 5 shows tagged... There are only $n"
+	exit 1
+fi
+echo "Thumbnails will be:"
+for x in "${tagged[@]}"; do
+	echo "${x%-*}.jpg"
+done
+while true; do
+	read -t 10 -n 1 -p "Do this look correct? (Y/n) " yn
+	yn="${yn:=y}"
+	case $yn in
+			[Yy]* ) echo "Good! We will continue." ; break ;;
+			[Nn]* ) echo "Exiting"; exit 1 ;;
+			* ) echo "Please answer yes or no.";;
+	esac
+done
+mv "$mainfolder"/youtube/thumbs/*.jpg "$mainfolder"/youtube/thumbs/all
+mv "$mainfolder"/salem/thumbs/*.jpg "$mainfolder"/salem/thumbs/all
+
+cd all || exit
+for i in "${tagged[@]}" ; do
+	# if [[ $( tag "$i" | grep '\tGreen' ) ]]; then
+		echo "Processing ${i%-*}.jpg"
+		tag --set Green "$mainfolder"/salem/thumbs/all/"$i"
+		cp "$i" ../"${i%-*}.jpg"
+		cp "$mainfolder/salem/thumbs/all/$i" "$mainfolder/salem/thumbs/${i%-*}.jpg"
+	# fi
+done
+mkdir -p "$mainfolder"/thumbs/PRAY
+cp -r "$mainfolder"/youtube/thumbs/*.jpg "$mainfolder"/thumbs
+cp -r "$mainfolder"/youtube/thumbs/*.jpg "$mainfolder"/thumbs/PRAY

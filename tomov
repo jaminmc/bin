@@ -1,0 +1,9 @@
+#!/bin/bash
+for i in "$@"; do
+	#sox -V "$i" "${i%.*}.wav" && rm "$i"
+	if [ -f "${i%.*}.mov" ]; then
+		echo "${i%.*}.mov already exists!"
+	else
+		ffmpeg -i "$i" -c copy "${i%.*}.mov"
+	fi
+done

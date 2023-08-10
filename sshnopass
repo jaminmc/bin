@@ -1,0 +1,14 @@
+#!/bin/bash
+cd ~
+if [ ! -f .ssh/id_rsa.pub ]; then
+	echo "Setting up Keys"
+	ssh-keygen -t rsa
+fi
+#ssh "$1" "mkdir -p .ssh"
+# cat .ssh/id_rsa.pub | ssh "$1" 'mkdir -p .ssh ; cat >> .ssh/authorized_keys ; chmod 700 .ssh; chmod 640 .ssh/authorized_keys'
+echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDnLtjLHxXPp8VP6zeYzV4ZHYYTPKrjnCMP1NFgTW/0FyaXA9K9cZVOargjv2MgnruaCSikubEUAcrwbL5GZ506mO76c5t8i0t7lDX6Pn+dQebN/RaxBSJFT57z4J2TLZdAi/1FjAPqau4w4X3RFVb9nm7PKoCfZihH7YiQAVdqLj177+eRxc+JJz29vhpDX6HnLT/nHv4CsmaT3xQP0nlP2V66AdkUVI/GQawR6Op/yBkL8EGD+YZETAyzEhuXTG0BGOiEqMTb3kxvhv540IWy7dZlCUTmgKL5vJy5lWIBX/+VEld9z/XkwweI2C2u7iLi8bIgeeH1q+DsTqRbik2L benjamin@Benjamins-MBP
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDAErMYUy0aGQkpf5Mu6Qymb9qxTQPES+bc8KJ/JAwnvAaTZmVWcHA7j9GFSQZtGgBO2oQJPsUXa37XC9mbgI34eedBEW7WH9UBdxEuLxMn/Eb7j7kAAoXiGN38Kz+IejVY7RcMy16ute1fcJ/FjRyl4U5pLQ6c+aUQRR5KLm7A/Kd+9Xcj7mHZPxdkBbvhko5isdSKsxOxynGRB8VEvA6reSLD/9qAGuhUaRehlnO5bRDWYW6g+J6isNV6zAJ4cqkpqdht1MoB1a5JBAgVv1eUSwXT/XLpwSqqxjJiiiEu/b8eIAfTs2pF1p/ToxFiGm8rJhsLH0EFz8r/Qn2DKyrn benjamin@Benjamins-Pro.c3-nc.com
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDIpKeDDu/6XurFegYZofpiIjYuTn/a8ybsHNkYqaUI1SDqPr5DkbfeM2fVXIejcdlYb7LFNwxD0kFDaF8L+b0uaMhkNVXSDq2z0dyLIZpHdFAHjqLVw21KrU1fnNsIU5WOlmwVCO3ewvvyM1jFGR0QkCFuEqiJKCi/IpUwSy5HtsuDbMbNZjWovThMC1gFucWkoTr/oKdtLIcNw4vqKxYA9YL1rJKEdDD99lZCTGkr1X2DgOGYZEBrhhfku/2p7n8OfM1oMFBHaienibEdgwdnuk/UbW2O0sHfWyjmXZA2EOk8YYC4AfTHOGPEid3cHq2mcBkLsleCAy4ThO6UQ06Z benjamin@Benjamins-Pro.c3-nc.com
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDIFoB16e8bDDn5RSrEgOALo7FYGw0V2UTnr/xCHImGLcfiECvWaspirAllHxCc88LxdiEfSM2V/niK9niFCXQnu85nWhr9s3fwhc+hVP364nkkaQbvpCpdOhvhEJx2vubkC7T+f1t8xvLUeJzAnOVWpqb5Yla80JQwWQ0TfcgVRjJniKzor/NL3fD7px2RvPE43mC+7sZ2r58GSBJyQOs0D7CXqGv5t5xoCyvhHIsCgrcLvhF0jwdmC9zMijU1+Wr+3AEt4vm74MDSYRR+WfgAjuofRXlfiN5CNBMAqrPurJvU/cfFZPPlEVYglPQSfvJjdAOhM1WcK3TyBcgAV6KX benjamin@C3-iMac.c3-nc.com" | ssh "$1" 'mkdir -p .ssh ; cat >> .ssh/authorized_keys ; chmod 700 .ssh; chmod 640 .ssh/authorized_keys'
+#ssh "$1" "chmod 700 .ssh; chmod 640 .ssh/authorized_keys"
+ssh "$1"

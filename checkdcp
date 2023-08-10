@@ -1,0 +1,52 @@
+#!/bin/bash
+SECONDS=0
+dcp="$1"
+Hashfile="$HOME/Documents/NGU-DCP-md5.txt"
+mytmpdir=$(mktemp -d 2>/dev/null || mktemp -d -t 'mytmpdir')
+tmphashfile="$mytmpdir/NGU-DCP-md5.txt"
+failed=0
+failedfiles=()
+masterdcp=/Volumes/NGUDCPMASTER
+touch "$tmphashfile"
+if [ ! -d "$dcp" ]; then
+    echo "Need DCP drive here!!"
+    exit 1
+fi
+cd "$dcp" || exit 1
+for i in Never*/*; do
+    goodhash="$(grep "$i" "$Hashfile" | awk '{print $NF}')"
+    echo "file $i is expected to be: $goodhash"
+    md5 "$i" | tee -a "$tmphashfile"
+    currenthash="$(tail -n1 "$tmphashfile" | awk '{print $NF}')"
+    if [[ "$goodhash" == "$currenthash" ]]; then
+        echo -e "  IT Passed!! :)\n"
+        duration=$SECONDS
+        echo "$((duration / 60)) minutes and $((duration % 60)) seconds elapsed since start."
+    else
+        echo -ne '\007'
+        echo -ne '\007'
+        echo -ne '\007'
+        echo -e "!!!!!!!!!!$i FAILED!!!!!!!!\n"
+        ((failed++))
+        failedfiles+=("$i")
+    fi
+done
+
+diff -u "$Hashfile" "$tmphashfile"
+
+if [[ "$failed" = 0 ]]; then
+    echo "$dcp has passed!!!"
+    say "$(basename "$dcp") has Passed!"
+else
+    echo "$failed files are BAD on $dcp!!!!"
+    for i in "${failedfiles[@]}"; do
+        goodhash="$(grep "$i" "$Hashfile" | awk '{print $NF}')"
+        echo -e "This might fix the broken filr of $i\n\n"
+        echo "rm '$dcp/$i'"
+        echo "pv '$masterdcp/$i' > '$dcp/$i'"
+        echo "md5 '$dcp/$i'"
+        echo "Hash should be: $goodhash"
+    done
+fi
+duration=$SECONDS
+echo "$((duration / 60)) minutes and $((duration % 60)) seconds elapsed."
