@@ -1,0 +1,39 @@
+#!/bin/bash
+
+processvideo () {
+    videoinput="$(realpath "$1")"
+    videofilename="$(basename "$videoinput")"
+    videoextension="${videofilename##*.}"
+    videofilename="${videofilename%.*}"
+    videofolder="$(dirname "$videoinput")"
+    orgvideo="$videofolder/${videofilename}-ORG.$videoextension"
+    videocodec=$(mediainfo --Inform="Video;%CodecID%" "$videoinput" | xargs)
+    echo "$videofilename is $videocodec"
+    shopt -s nocasematch; if [ $videoextension != "mov" ]; then
+        echo "$videofilename is NOT a QT file!!! Skipping."
+        return
+    fi
+    if [[ "$videocodec" == "rle" ]]; then
+        echo "Convert $videoinput to Prores"
+        if [ -e "$orgvideo" ]; then
+            echo "Original Video with -ORG exists... Skipping."
+            return
+        else
+            mv "$videoinput" "$orgvideo" || exit 1
+            ffmpeg -i "$orgvideo" -map 0:v -map "0:a?" -c:a copy -c:v prores_ks -profile:v 4 "$videoinput"
+            # echo "Rename $videoinput to $orgvideo"
+            # echo "convert $orgvideo to prores $videoinput"
+        fi
+    fi
+}
+
+for x in "$@"; do
+    if [ -f "$x" ]; then
+        processvideo "$x"
+    fi
+    if [ -d "$x" ]; then
+        for y in "$x/"*.mov; do
+            processvideo "$y"
+        done
+    fi
+done

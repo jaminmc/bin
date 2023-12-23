@@ -1,0 +1,75 @@
+#!/bin/bash
+
+ProcessFile() {
+	i="$1"
+	if [ -e "$i" ]; then
+		srcfolder="$(
+			cd "$(dirname "$i")"
+			pwd
+		)" || exit 1
+		file="$(basename "$i")"
+		captions=""
+		rumblefolder="$srcfolder/rumble"
+		[ -d "$rumblefolder" ] || mkdir -p "$rumblefolder"
+		[ -d "$rumblefolder/thumbs" ] || mkdir -p "$rumblefolder/thumbs"
+		[ -d "$rumblefolder/Captions" ] || mkdir -p "$rumblefolder/Captions"
+
+		if [ -e "$i".scc ]; then
+			captions="$i".scc
+		elif [ -e "$srcfolder/Captions/${file%.*}".scc ]; then
+			captions="$srcfolder/Captions/${file%.*}".scc
+		elif [ -e "$srcfolder/../Captions/${file%.*}".scc ]; then
+			captions="$srcfolder/../Captions/${file%.*}".scc
+		elif [ -e "$srcfolder/Captions/${file%.*}".mpg.scc ]; then
+			rename 's/\.mpg\./\./' "$srcfolder/Captions/"*
+			captions="$srcfolder/Captions/${file%.*}".scc
+		elif [ -e "$srcfolder/../Captions/${file%.*}".mpg.scc ]; then
+			rename 's/\.mpg\./\./' "$srcfolder/../Captions/"*
+			captions="$srcfolder/../Captions/${file%.*}".scc
+		fi
+
+		rumbmp4="$rumblefolder/${file%.*}.mp4"
+
+		nice -n 20 ffmpeg -i "$i" -map 0:v -map 0:a? -hide_banner -b:a 320k -metadata xmp="" -vf bwdif=1:0 -y -pix_fmt yuv420p -loglevel verbose -g 180 -maxrate:v 20M -bufsize:v 20M -aspect 16:9 -c:v hevc_videotoolbox -q:v 72 -tag:v hvc1 "$rumbmp4"
+
+		if [[ $captions ]]; then
+			tt convert -i "$captions" -o "$rumblefolder/Captions/${file%.*}".vtt --config '{"vtt_writer": {"line_position":true}}'
+			tt convert -i "$captions" -o "$rumblefolder/Captions/${file%.*}".srt
+			tt convert -i "$captions" -o "$rumblefolder/Captions/${file%.*}".ttml
+			cp "$captions" "$rumblefolder/Captions/${file%.*}".scc
+		fi
+
+		duration=$(($(mediainfo --Inform="General;%Duration%" "$i") / 1000 - 120))
+		if [[ $(mediainfo --Inform="Video;%ScanType%" "$i") != "Progressive" ]]; then
+			echo "Video isn't Progressive... Will De-Iterlace Thumbnail."
+			sleep 4
+			for n in {1..60}; do
+				rand=$((RANDOM % duration + 60))
+				ffmpeg -ss $rand -i "$i" -vf "bwdif" -frames:v 1 -y "$rumblefolder/thumbs/${file%.*}-$rand.jpg"
+			done
+		else
+			echo "Video is Progressive!!! Yay!"
+			sleep 4
+			for ((n = 0; n < 60; n++)); do
+				# rand="$(( $RANDOM % 1680 ))"
+				rand=$((RANDOM % duration + 60))
+				ffmpeg -ss $rand -i "$i" -frames:v 1 -y "$rumblefolder/thumbs/${file%.*}-$rand.jpg"
+			done
+		fi
+
+	else
+		echo "$i Does not exist!!! "
+	fi
+}
+
+for input in "$@"; do
+	if [ -d "$input" ]; then
+		for xin in "$input"/*.mov; do
+			ProcessFile "$xin"
+		done
+	elif [ -e "$input" ]; then
+		ProcessFile "$input"
+	else
+		echo "$input is crap!"
+	fi
+done

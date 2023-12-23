@@ -1,0 +1,22 @@
+#!/bin/bash
+input="$1"
+Series="The Gospel of Matthew"
+SeriesShort="Gospel of Matthew"
+Description="In order to follow in Jesus' footsteps as they are described in the Gospel of Matthew, Gordon Klingenschmitt, PhD, leads you across the Land of Israel.
+
+With verse-by-verse analysis and teachings from many of the real places where Jesus actually walked during his earthly ministry, Dr. Chaps delivers you inspiring Bible teaching.
+
+You will increase your knowledge and love of our Lord and Savior, Jesus Christ, when you follow along with this study."
+n=1
+
+while IFS= read -r line; do
+  # echo "$SeriesShort, Part $n: $line"
+  echo "$SeriesShort, Part $n: $line"
+  ((n++))
+done < "$input"
+n=1
+while IFS= read -r line; do
+  # echo -e "___________\n$Series, Part $n of 4\n\n$Description\n$line"
+  echo -e "___________\n$Series, Part $n of 17: $line\n\n$Description"
+  ((n++))
+done < "$input"

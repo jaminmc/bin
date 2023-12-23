@@ -1,0 +1,61 @@
+#!/bin/bash
+captiondir="$(cd "$(dirname "$1")"; pwd)"
+
+if [ -d "$1" ]; then
+	isdir=1
+	cd "$1"
+	#statements
+fi
+
+if [[ $isdir = 1 ]]; then
+	for i in "$1"/*.scc; do
+		if [[ $( sed -n 5p "$i" | cut -c 9) = ";" ]]; then
+			Isdp="df"
+		else
+			Isdp="ndf"
+		fi
+		if [ -e "${i%.*}.vtt" ]; then
+			echo "${i%.*}.vtt exists... Skipping"
+			# mkdir vtt
+			# filename="$( basename "$i" )"
+			# /Applications/MacCaption.app/Contents/MacOS/MacCaption -omit_reading_preferences_file -tcmode=29.97df -import=cheetah_cap -displaymode=caption -input="$i" -export=scc -inhibit_gui -remove_short_erase=T -remove_short_erase_frames=2 -disablecaptiondatalowestlimit -usesemicolonsinsccfileexport=T -output="vtt/${filename%.*}.vtt"
+		else
+			/Applications/MacCaption.app/Contents/MacOS/MacCaption -omit_reading_preferences_file -tcmode=29.97$Isdp -import=scc -displaymode=caption -input="$i" -remove_short_erase=T -remove_short_erase_frames=2 -export=webvtt -inhibit_gui -remove_short_erase=T -remove_short_erase_frames=2 -disablecaptiondatalowestlimit -usesemicolonsinsccfileexport=T -output="${i%.*}.vtt"
+			gsed -i '2d;3d' "${i%.*}.vtt"
+		fi
+		if [ -e "${i%.*}.srt" ]; then
+			echo "${i%.*}.srt exists... Skipping"
+			# mkdir vtt
+			# filename="$( basename "$i" )"
+			# /Applications/MacCaption.app/Contents/MacOS/MacCaption -omit_reading_preferences_file -tcmode=29.97df -import=cheetah_cap -displaymode=caption -input="$i" -export=scc -inhibit_gui -remove_short_erase=T -remove_short_erase_frames=2 -disablecaptiondatalowestlimit -usesemicolonsinsccfileexport=T -output="vtt/${filename%.*}.vtt"
+		else
+			/Applications/MacCaption.app/Contents/MacOS/MacCaption -omit_reading_preferences_file -tcmode=29.97$Isdp -import=scc -displaymode=caption -input="$i" -remove_short_erase=T -remove_short_erase_frames=2 -export=subrip_srt -subrip_srt_export_use_styling_tags=T -inhibit_gui -output="${i%.*}.srt"
+		fi
+
+	done
+else
+	for i in "$@"; do
+		if [[ $( sed -n 5p "$i" | cut -c 9) = ";" ]]; then
+			Isdp="df"
+		else
+			Isdp="ndf"
+		fi
+		if [ -e "${i%.*}.vtt" ]; then
+			echo "${i%.*}.vtt exists... Skipping"
+			# mkdir vtt
+			# filename="$( basename "$i" )"
+			# /Applications/MacCaption.app/Contents/MacOS/MacCaption -omit_reading_preferences_file -tcmode=29.97df -import=cheetah_cap -displaymode=caption -input="$i" -export=scc -inhibit_gui -remove_short_erase=T -remove_short_erase_frames=2 -disablecaptiondatalowestlimit -usesemicolonsinsccfileexport=T -output="vtt/${filename%.*}.vtt"
+		else
+			/Applications/MacCaption.app/Contents/MacOS/MacCaption -omit_reading_preferences_file -tcmode=29.97$Isdp -import=scc -displaymode=caption -input="$i" -remove_short_erase=T -remove_short_erase_frames=2 -export=webvtt -inhibit_gui -remove_short_erase=T -remove_short_erase_frames=2 -disablecaptiondatalowestlimit -usesemicolonsinsccfileexport=T -output="${i%.*}.vtt"
+			gsed -i '2d;3d' "${i%.*}.vtt"
+		fi
+		if [ -e "${i%.*}.srt" ]; then
+			echo "${i%.*}.srt exists... Skipping"
+			# mkdir vtt
+			# filename="$( basename "$i" )"
+			# /Applications/MacCaption.app/Contents/MacOS/MacCaption -omit_reading_preferences_file -tcmode=29.97df -import=cheetah_cap -displaymode=caption -input="$i" -export=scc -inhibit_gui -remove_short_erase=T -remove_short_erase_frames=2 -disablecaptiondatalowestlimit -usesemicolonsinsccfileexport=T -output="vtt/${filename%.*}.vtt"
+		else
+			/Applications/MacCaption.app/Contents/MacOS/MacCaption -omit_reading_preferences_file -tcmode=29.97$Isdp -import=scc -displaymode=caption -input="$i" -remove_short_erase=T -remove_short_erase_frames=2 -export=subrip_srt -subrip_srt_export_use_styling_tags=T -inhibit_gui -output="${i%.*}.srt"
+		fi
+	done
+fi

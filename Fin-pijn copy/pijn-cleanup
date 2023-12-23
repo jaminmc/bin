@@ -1,0 +1,29 @@
+#!/bin/bash
+if [ ! -d "$1" ]; then
+    echo "Nees to specify the folder(s) to clean up!"
+    exit 1
+fi
+
+remfolder() {
+    folder="$1"
+    if [ -d "$folder" ] ; then
+        echo "Removing $folder ..."
+        rm -rf "$folder"
+    fi
+}
+
+for f in "$@"; do
+    f="$(realpath "$f")"
+    if [ -d "$f" ]; then
+        remfolder "$f/Adobe Premiere Pro Auto-Save"
+        remfolder "$f/Captioned"
+        remfolder "$f/GEB"
+        remfolder "$f/NRB"
+        remfolder "$f/salem"
+        remfolder "$f/SD"
+        remfolder "$f/youtube"
+        remfolder "$f/Captioned"
+        remfolder "$f/Distro"
+
+    fi
+done

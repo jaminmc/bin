@@ -1,0 +1,63 @@
+#!/bin/bash
+month=$(gdate -dnext-monday +%m)
+weeknum=$( expr $(gdate -dnext-monday +%V) - $(gdate +%V -d $(gdate -dnext-monday +%Y-%m-01)))
+if [[ $(gdate +%a -d $(gdate -dnext-monday +%Y-%m-01)) = 'Mon' ]]; then
+	((weeknum++))
+fi
+weeknum=$(printf "%02d\n" $weeknum)
+week=$month-$weeknum
+autoexcel="/Volumes/Storage/PIJN/$week/PIJN-$(gdate -dnext-monday +%m%d)-$(gdate -d 1week-friday +%m%d).xlsx"
+source="$1"
+if [[ ! "$source" ]] || [ -d "$source" ]; then
+  if [ ! -f "$autoexcel" ]; then
+    echo "ERROR!! Be sure to run with Excel file!!!"
+    exit 1
+  else
+    while true; do
+      echo "No input provided! $autoexcel will be used. "
+      read -t 10 -n 1 -p "Do this look correct? (Y/n) " yn
+      yn="${yn:=y}"
+      case $yn in
+          [Yy]* ) break ;;
+          [Nn]* ) echo "Exiting..."; exit 1 ;;
+          * ) echo "Please answer yes or no.";;
+      esac
+    done
+    source="$autoexcel"
+  fi
+fi
+execl="$(realpath "$source")"
+srcfolder="$(dirname "$execl")"
+for i in "$srcfolder/salem/mp3/"*.mp3 ; do
+  filename="$(basename "$i")"
+  filename="${filename%.*}"
+  title="$(pijn-parse -t "$execl" "$filename.mp4")"
+  if [[ ! $title ]]; then
+    echo "ERROR!!!!!!!!!"
+    echo "$srcfolder/salem/mp3/$filename.mp3 DOES NOT EXIST in EXCEL!!!! Edit Excel file to fix!!!"
+    exit 1
+  fi
+done
+
+for i in "$srcfolder/salem/mp3/"*.mp3 ; do
+  echo "i is $i"
+  filename="$(basename "$i")"
+  filename="${filename%.*}"
+  if [[ "$filename" == "PIJN"* ]]; then
+    echo "OOPS!!!!!! Looks like you need to run the 'pijn-rename' with the Excel file! Please do that, and try again!"
+    exit 1
+  fi
+  description="$(pijn-parse -d "$execl" "$filename.mp4")"
+  title="$(pijn-parse -t "$execl" "$filename.mp4")"
+  echo "Sourcefile: $i"
+  echo "Filename is: $filename"
+  echo "Title: $title"
+  echo "Description: $description"
+  if [[ ! $title ]]; then
+    echo "ERROR!!!!!!!!!"
+    echo "$srcfolder/salem/mp3/$filename.mp3 DOES NOT EXIST in EXCEL!!!! Edit Excel file to fix!!!"
+    echo "If video"
+    exit 1
+  fi
+  eyeD3 -a "PIJN News" -t "$title"  --add-comment "$description":eng --add-image "$srcfolder/salem/thumbs/$filename.jpg:FRONT_COVER" "$srcfolder/salem/mp3/$filename.mp3"
+done

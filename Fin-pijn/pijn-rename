@@ -1,0 +1,168 @@
+#!/bin/bash
+month=$(gdate -dnext-monday +%m)
+weeknum=$(expr "$(gdate -dnext-monday +%V)" - "$(gdate +%V -d "$(gdate -dnext-monday +%Y-%m-01)")")
+if [[ $(gdate +%a -d $(gdate -dnext-monday +%Y-%m-01)) = 'Mon' ]]; then
+	((weeknum++))
+fi
+weeknum=$(printf "%02d\n" $weeknum)
+week=$month-$weeknum
+autoexcel="/Volumes/Storage/PIJN/$week/PIJN-$(gdate -dnext-monday +%m%d)-$(gdate -d 1week-friday +%m%d).xlsx"
+source="$1"
+if [[ $source != *".xlsx" ]]; then
+  echo -e "OOps! No excel file! Please run with excel file!!!"
+  if [ ! -f "$autoexcel" ]; then
+    echo -e "ERROR!! Be sure to run with Excel file!!!\n expecting $autoexcel if none provided."
+    exit 1
+  else
+    while true; do
+      echo "No input provided! $autoexcel will be used. "
+      read -t 10 -n 1 -p "Do this look correct? (Y/n) " yn
+      yn="${yn:=y}"
+      case $yn in
+      [Yy]*) break ;;
+      [Nn]*)
+        echo "Exiting..."
+        exit 1
+        ;;
+      *) echo "Please answer yes or no." ;;
+      esac
+    done
+    source="$autoexcel"
+  fi
+fi
+if [ ! -f "$source" ]; then
+  echo "$source doesn't seem to be a file."
+  if [ ! -f "$autoexcel" ]; then
+    echo "ERROR!! Be sure to run with Excel file!!!"
+    exit 1
+  else
+    while true; do
+      echo "No input provided! $autoexcel will be used. "
+      read -t 10 -n 1 -p "Do this look correct? (Y/n) " yn
+      yn="${yn:=y}"
+      case $yn in
+      [Yy]*) break ;;
+      [Nn]*)
+        echo "Exiting..."
+        exit 1
+        ;;
+      *) echo "Please answer yes or no." ;;
+      esac
+    done
+    source="$autoexcel"
+    resetcapt=1
+  fi
+fi
+excelfile="$(realpath "$source")"
+sourcepath="$(cd "$(dirname "$excelfile")" && pwd || exit 1)"
+cd "$sourcepath" || exit 1
+captionslist="$(ls -1 Captions)"
+if [[ $captionslist == *".zip"* ]]; then
+  echo "Captions still zipped!!! Unzipping..."
+  pijn-unzip Captions
+  # rename 's/NRPJN..../PIJN/' Captions/*
+elif [[ $captionslist == *".scc"* ]]; then
+  echo "Captions are good!"
+  # rename 's/NRPJN..../PIJN/' Captions/*
+else
+  echo "Captions folder seems empty... make sure you have downloaded them!"
+  exit 1
+fi
+ls *.mpg >/dev/null 2>&1 && for x in *.mpeg; do mv "$x" "${x%mpeg}mpg"; done
+if [[ "$resetcapt" == 1 ]]; then
+  echo "Resetting Captions..."
+  rename 's/NRPJN..../PIJN/' *.mpg Captions/*
+fi
+
+ls *.fcpxmld >/dev/null 2>&1 && mv *.fcpxmld CSV
+files=()
+while IFS= read -r line; do
+  files+=("$line")
+done <<<"$(pijn-excel2txt "$excelfile" | grep Filename | sed 's/Filename: //')"
+for f in "${files[@]}"; do
+  showid=$(echo "$f" | awk -F"-" '{print $1}')
+  shownumber=$(echo "$f" | awk -F"-" '{print $2}')
+  if [[ ${#showid} != 9 ]]; then
+    echo "$f is invalid!!"
+    echo -e "The Showid in the filename needs of $showid is incorrect!!!\n"
+    bad=1
+  fi
+  if [ "$shownumber" -eq "$shownumber" ] 2>/dev/null; then
+    if [[ ${#shownumber} != 4 ]]; then
+      echo "$f is invalid!!"
+      echo -e "The Shownumber in the filename needs to be 4 digits long! Not ${#shownumber}\n"
+      bad=1
+    fi
+  else
+    echo "$f is invalid!!"
+    echo -e "The Shownumber in the filename should be a number!\n"
+    read -r -p "Is $shownumber ok? [y/N] " response
+    case "$response" in
+    [yY][eE][sS] | [yY])
+      echo "Proceeding with $shownumber"
+      ;;
+    *)
+      bad=1
+      ;;
+    esac
+
+  fi
+done
+
+if [[ $bad = 1 ]]; then
+  echo "Please fix the errors in the Excel file, and try again!"
+  exit 1
+fi
+
+for f in "${files[@]}"; do
+  echo "File in excel is: $f"
+  shownumber=$(echo "$f" | awk -F"-" '{print $2}')
+  echo "Shownumber is: $shownumber"
+  sourcefile=$(echo *"-$shownumber-"*.mpg)
+  sourcefilebad=\*"-$shownumber-"\*.mpg
+  if [[ "$sourcefile" == "$sourcefilebad" ]]; then
+    if [ -f "$f".mpg ]; then
+      echo "$f seems to already have been renammed. Skipping"
+    else
+      echo "Sourcefile does not exits!!!! Check Excel File to see if the Show number matches! Edit it if it doesn't"
+      while true; do
+        read -p "Do you want to quit? (Y/n) " yn
+        case $yn in
+        [Yy]*) exit 1 ;;
+        [Nn]*)
+          echo "skipping $f"
+          break
+          ;;
+        *) echo "Please answer yes or no." ;;
+        esac
+      done
+    fi
+
+    # break
+  else
+    if [[ "$sourcefile" == "$f".mpg ]]; then
+      echo "$f seems to already have been renammed. Skipping"
+    else
+      sourcefile="${sourcefile%.mpg}"
+      echo "sourcefilename is: $sourcefile"
+      find . -iname "$sourcefile*" -exec rename -n "s/$sourcefile/$f/gi" {} \;
+      while true; do
+        read -t 10 -n 1 -p "Do this look correct? (Y/n) " yn
+        yn="${yn:=y}"
+        case $yn in
+        [Yy]*)
+          find . -iname "$sourcefile*" -exec rename "s/$sourcefile/$f/gi" {} \;
+          break
+          ;;
+        [Nn]*)
+          echo "skipping $f"
+          break
+          ;;
+        *) echo "Please answer yes or no." ;;
+        esac
+      done
+    fi
+
+  fi
+
+done

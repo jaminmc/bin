@@ -1,0 +1,174 @@
+#!/bin/bash
+month=$(gdate -dnext-monday +%m)
+
+# weeknum=$( expr 1 + $(gdate -dnext-monday +%V) - $(gdate +%V -d $(gdate -dnext-monday +%Y-%m-01)))
+weeknum=$(expr $(gdate -dnext-monday +%V) - $(gdate +%V -d $(gdate -dnext-monday +%Y-%m-01)))
+if [[ $(gdate +%a -d $(gdate -dnext-monday +%Y-%m-01)) = 'Mon' ]]; then
+	((weeknum++))
+fi
+weeknum=$(printf "%02d\n" $weeknum)
+week=$month-$weeknum
+
+nextweekfolder="$(realpath "/Volumes/Storage/PIJN/$week")"
+
+ProcessFile() {
+	i="$1"
+	if [ -e "$i" ]; then
+		srcfolder="$(
+			cd "$(dirname "$i")"
+			pwd
+		)" || exit 1
+		file="$(basename "$i")"
+		captions=""
+		timecode="$(mediainfo --Inform="Video;%TimeCode_FirstFrame%" "$i")"
+		[[ $timecode ]] && timecode="-timecode $timecode"
+		youtubefolder="$srcfolder/youtube"
+		salemfolder="$srcfolder/salem"
+		[ -d "$salemfolder" ] || mkdir -p "$salemfolder"
+		[ -d "$youtubefolder" ] || mkdir -p "$youtubefolder"
+		[ -d "$salemfolder/mp3" ] || mkdir -p "$salemfolder/mp3"
+		[ -d "$salemfolder/thumbs" ] || mkdir -p "$salemfolder/thumbs"
+		[ -d "$youtubefolder/thumbs" ] || mkdir -p "$youtubefolder/thumbs"
+		if [ -e "$i".scc ]; then
+			captions="$i".scc
+		elif [ -e "$srcfolder/Captions/${file%.*}".scc ]; then
+			captions="$srcfolder/Captions/${file%.*}".scc
+		elif [ -e "$srcfolder/../Captions/${file%.*}".scc ]; then
+			captions="$srcfolder/../Captions/${file%.*}".scc
+		elif [ -e "$srcfolder/Captions/${file%.*}".mpg.scc ]; then
+			rename 's/\.mpg\./\./' "$srcfolder/Captions/"*
+			captions="$srcfolder/Captions/${file%.*}".scc
+		elif [ -e "$srcfolder/../Captions/${file%.*}".mpg.scc ]; then
+			rename 's/\.mpg\./\./' "$srcfolder/../Captions/"*
+			captions="$srcfolder/../Captions/${file%.*}".scc
+		fi
+
+		ytmov="$youtubefolder/${file%.*}.mov"
+		ytmp4="$youtubefolder/${file%.*}.mp4"
+		ytmp4cc="$youtubefolder/${file%.*}-cc.mp4"
+		slmov="$salemfolder/${file%.*}.mov"
+		slmp4="$salemfolder/${file%.*}.mp4"
+		slmp4cc="$salemfolder/${file%.*}-cc.mp4"
+
+		if [[ $captions ]]; then
+
+			if [ -e "$ytmp4" ]; then
+				nice -n 20 ffmpeg -i "$ytmp4" -hide_banner -map 0:v -map 0:a $timecode -c copy "$ytmov"
+				nice -n 20 ffmpeg -i "$slmp4" -hide_banner -map 0:v -map 0:a $timecode -c copy "$slmov"
+			else
+				nice -n 20 ffmpeg -i "$i" -map 0:v -map 0:a? -hide_banner -b:a 320k -metadata xmp="" -vf yadif=1:0 -y -pix_fmt yuv420p -loglevel verbose -g 180 -maxrate:v 20M -bufsize:v 20M -aspect 16:9 -c:v libx264 -crf 16 -x264opts ref=4:qpmin=4:colorprim=bt709:transfer=bt709:colormatrix=bt709 -preset:v fast $timecode "$ytmov" \
+					-b:a 128K -metadata xmp="" -vf yadif=0:0,scale=1280:720 -y -pix_fmt yuv420p -r 29.97 -loglevel verbose -g 180 -maxrate:v 10M -bufsize:v 10M -aspect 16:9 -c:v libx264 -crf 25 -x264opts ref=4:qpmin=4:colorprim=bt709:transfer=bt709:colormatrix=bt709 $timecode "$slmov" \
+					-vn -ar 44100 -b:a 96k -metadata:s:a:0 language=eng -y "$salemfolder/mp3/${file%.*}".mp3
+			fi
+			if [[ $(sed -n 5p "$captions" | cut -c 9) = ";" ]]; then
+				Isdp="df"
+			else
+				Isdp="ndf"
+			fi
+			command1="-tcmode=29.97$Isdp"
+			command2="-command=changetcmode,59.94$Isdp"
+			/Applications/MacCaption.app/Contents/MacOS/MacCaption -omit_reading_preferences_file -movie="$ytmov" $command1 -import=scc -displaymode=caption -ioptions=A1 -input="$captions" $command2 -addtofile=quicktime608 -addtofile_target="$ytmov"
+			/Applications/MacCaption.app/Contents/MacOS/MacCaption -omit_reading_preferences_file -movie="$slmov" $command1 -import=scc -displaymode=caption -ioptions=A1 -input="$captions" -addtofile=quicktime608 -addtofile_target="$slmov"
+
+			# Convert to propper MP4
+			/Applications/GPAC.app/Contents/MacOS/MP4Box -add "$ytmov" -lang 1=Eng -lang 2=eng -lang 3=eng -lang 4=eng -new "$ytmp4cc" && rm "$ytmov"
+			/Applications/GPAC.app/Contents/MacOS/MP4Box -add "$slmov" -lang 1=Eng -lang 2=eng -lang 3=eng -lang 4=eng -new "$slmp4cc" && rm "$slmov"
+			# Convert to propper MP4
+			if [ ! -e "${captions%.*}.txt" ]; then
+				/Applications/MacCaption.app/Contents/MacOS/MacCaption -import=scc -displaymode=caption -ioptions=A1 -input="$captions" -export=plaintext -output="${captions%.*}.txt"
+			fi
+			# [ -d "$salemfolder/Transcripts" ] || mkdir -p "$salemfolder/Transcripts"
+			# enscript "${captions%.*}.txt" -f Helvetica10 --word-wrap -hBRp "$salemfolder/Transcripts/eps/${file%.*}".eps
+			[ -d "$salemfolder/Transcripts" ] || mkdir -p "$salemfolder/Transcripts"
+			txt2pdf "${captions%.*}.txt" "$salemfolder/Transcripts/${file%.*}".pdf
+			# ls "$youtubefolder/thumbs/${file%.*}"* > /dev/null 2>&1 || ~/bin/pijn-thumbnails.sh "$ytmp4cc"
+			if [ -e "$ytmp4" ]; then
+				[ ! -d "$youtubefolder"/uncaptioned ] && mkdir -p "$youtubefolder"/uncaptioned
+				mv "$ytmp4" "$youtubefolder"/uncaptioned
+			fi
+			if [ -e "$slmp4" ]; then
+				[ ! -d "$salemfolder"/uncaptioned ] && mkdir -p "$salemfolder"/uncaptioned
+				mv "$slmp4" "$salemfolder"/uncaptioned
+			fi
+
+		else
+			if [ ! -e "$ytmp4" ]; then
+				nice -n 20 ffmpeg -i "$i" -map 0:v -map 0:a? -b:a 320k -metadata xmp="" -vf yadif=1:0 -pix_fmt yuv420p -loglevel verbose -g 180 -maxrate:v 20M -bufsize:v 20M -aspect 16:9 -c:v libx264 -crf 16 -x264opts ref=4:qpmin=4:colorprim=bt709:transfer=bt709:colormatrix=bt709 -movflags +faststart -preset:v fast $timecode "$ytmp4" \
+					-b:a 128K -metadata xmp="" -vf yadif=0:0,scale=1280:720 -pix_fmt yuv420p -r 29.97 -loglevel verbose -g 180 -maxrate:v 10M -bufsize:v 10M -aspect 16:9 -c:v libx264 -crf 25 -x264opts ref=4:qpmin=4:colorprim=bt709:transfer=bt709:colormatrix=bt709 -movflags +faststart $timecode "$slmp4" \
+					-vn -ar 44100 -b:a 96k -metadata:s:a:0 language=eng -y "$salemfolder/mp3/${file%.*}".mp3
+			else
+				echo "$ytmp4 already exists... Skipping"
+				sleep 5
+			fi
+
+			# ls "$youtubefolder/thumbs/${file%.*}"* > /dev/null 2>&1 || ~/bin/pijn-thumbnails.sh "$ytmp4"
+		fi
+		# if [[ "$youtubefolder/thumbs/${file%.*}"-'*.jpg' != "$youtubefolder/thumbs/${file%.*}"-*.jpg ]]; then
+		# 	rm "$youtubefolder/thumbs/${file%.*}"-*.jpg
+		# fi
+		# if [[ "$salemfolder/thumbs/${file%.*}"-'*.jpg' != "$salemfolder/thumbs/${file%.*}"-*.jpg ]]; then
+		# 	rm "$salemfolder/thumbs/${file%.*}"-*.jpg
+		# fi
+
+		duration=$(($(mediainfo --Inform="General;%Duration%" "$i") / 1000 - 120))
+		if [[ $(mediainfo --Inform="Video;%ScanType%" "$i") != "Progressive" ]]; then
+			echo "Video isn't Progressive... Will De-Iterlace Thumbnail."
+			sleep 4
+			for n in {1..30}; do
+				rand=$((RANDOM % duration + 60))
+				ffmpeg -ss $rand -i "$i" -vf "bwdif" -frames:v 1 -y "$youtubefolder/thumbs/${file%.*}-$rand.jpg"
+				ffmpeg -ss $rand -i "$i" -vf "bwdif,scale=852:480" -frames:v 1 -y "$salemfolder/thumbs/${file%.*}-$rand.jpg" 2>/dev/null
+			done
+		else
+			echo "Video is Progressive!!! Yay!"
+			sleep 4
+			for n in {1..30}; do
+				# rand="$(( $RANDOM % 1680 ))"
+				rand=$((RANDOM % duration + 60))
+				ffmpeg -ss $rand -i "$i" -frames:v 1 -y "$youtubefolder/thumbs/${file%.*}-$rand.jpg"
+				ffmpeg -ss $rand -i "$i" -frames:v 1 -vf "scale=852:480" -y "$salemfolder/thumbs/${file%.*}-$rand.jpg" 2>/dev/null
+			done
+		fi
+
+	else
+		echo "$i Does not exist!!! "
+	fi
+}
+
+if [[ -z $@ ]]; then
+	while true; do
+		echo "No input provided! $nextweekfolder will be used. "
+		read -t 10 -n 1 -p "Do this look correct? (Y/n) " yn
+		yn="${yn:=y}"
+		case $yn in
+		[Yy]*) break ;;
+		[Nn]*)
+			echo "Exiting..."
+			exit 1
+			;;
+		*) echo "Please answer yes or no." ;;
+		esac
+	done
+	if [ -d "$nextweekfolder" ]; then
+		for xin in "$nextweekfolder"/*.mpg; do
+			ProcessFile "$xin"
+		done
+	fi
+else
+	for input in "$@"; do
+		if [ -d "$input" ]; then
+			for xin in "$input"/*.mpg; do
+				ProcessFile "$xin"
+			done
+		elif [ -e "$input" ]; then
+			ProcessFile "$input"
+		elif [ -d "/Volumes/Storage/PIJN/$input" ]; then
+			for xin in "/Volumes/Storage/PIJN/$input"/*.mpg; do
+				ProcessFile "$xin"
+			done
+		else
+			echo "$input is crap!"
+		fi
+	done
+
+fi

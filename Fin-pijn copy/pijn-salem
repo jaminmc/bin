@@ -1,0 +1,63 @@
+#!/bin/bash
+for i in "$@" ; do
+	if [ -e "$i" ]; then
+		srcfolder="$(cd "$(dirname "$i")"; pwd)" || exit 1
+		file="$(basename "$i")"
+		salemfolder="$srcfolder/salem"
+		captions=""
+		[ -d "$salemfolder" ] || mkdir -p "$salemfolder"
+		if [ -e "$i".scc ]; then
+			captions="$i".scc
+		elif [ -e "$srcfolder/Captions/${file%.*}".scc ]; then
+			captions="$srcfolder/Captions/${file%.*}".scc
+		elif [ -e "$srcfolder/../Captions/${file%.*}".scc ]; then
+			captions="$srcfolder/../Captions/${file%.*}".scc
+		fi
+		slmov="$salemfolder/${file%.*}.mov"
+		slmp4="$salemfolder/${file%.*}.mp4"
+		slmp4cc="$salemfolder/${file%.*}-cc.mp4"
+
+		if [[ $captions ]]; then
+			if [ -e "$slmp4" ]; then
+				nice -n 20 ffmpeg -i "$slmp4" -map 0:v -map 0:a -c copy "$slmov"
+			else
+				nice ffmpeg -i "$i" -map 0:v -map 0:a? -b:a 128K -metadata xmp="" -vf yadif=0:0,scale=1280:720 -y -pix_fmt yuv420p -r 29.97 -loglevel verbose -g 180 -maxrate:v 10M -bufsize:v 10M -aspect 16:9 -c:v libx264 -crf 25 -x264opts ref=4:qpmin=4:colorprim=bt709:transfer=bt709:colormatrix=bt709 -metadata:s:a:0 language=eng "$slmov"
+			fi
+			if [[ $( sed -n 5p "$captions" | cut -c 9) = ";" ]]; then
+				Isdp="df"
+			else
+				Isdp="ndf"
+			fi
+			command1="-tcmode=29.97$Isdp"
+			/Applications/MacCaption.app/Contents/MacOS/MacCaption -omit_reading_preferences_file -movie="$slmov" $command1 -import=scc -displaymode=caption -ioptions=A1 -input="$captions" -addtofile=quicktime608 -addtofile_target="$slmov"
+			# Convert to propper MP4
+			/Applications/GPAC.app/Contents/MacOS/MP4Box -add "$slmov" -lang 1=Eng -lang 2=eng -lang 3=eng -new "$slmp4cc" && rm "$slmov"
+			if [ ! -e "${captions%.*}.txt" ]; then
+				/Applications/MacCaption.app/Contents/MacOS/MacCaption -import=scc -displaymode=caption -ioptions=A1 -input="$captions" -export=plaintext -output="${captions%.*}.txt"
+			fi
+			[ -d "$salemfolder/Transcripts/eps" ] || mkdir -p "$salemfolder/Transcripts/eps"
+			enscript "${captions%.*}.txt" -f Helvetica10 --word-wrap -hBRp "$salemfolder/Transcripts/eps/${file%.*}".eps
+
+		else
+			nice ffmpeg -i "$i" -map 0:v -map 0:a?  -b:a 128K -metadata xmp="" -vf yadif=0:0,scale=1280:720 -pix_fmt yuv420p -r 29.97 -loglevel verbose -g 180 -maxrate:v 10M -bufsize:v 10M -aspect 16:9 -c:v libx264 -crf 25 -x264opts ref=4:qpmin=4:colorprim=bt709:transfer=bt709:colormatrix=bt709 -movflags +faststart "$slmp4"
+
+		fi
+		[ -d "$salemfolder/mp3" ] || mkdir -p "$salemfolder/mp3"
+		ffmpeg -i "$i" -vn -ar 44100 -b:a 96k -metadata:s:a:0 language=eng -y "$salemfolder/mp3/${file%.*}".mp3
+		[ -d "$salemfolder/thumbs" ] || mkdir -p "$salemfolder/thumbs"
+		ls "$salemfolder/thumbs/${file%.*}"* > /dev/null 2>&1 || if ! ls "$salemfolder/../youtube/thumbs/${file%.*}"* ; then
+			for t in "$salemfolder/../youtube/thumbs/${file%.*}"* ; do
+				ffmpeg -i "$t" -vf "scale=852:480" -y "$salemfolder/thumbs/$(basename "$t")"
+			done
+		else
+			for n in {1..20}; do
+				rand="$(( RANDOM % 1680 ))"
+				echo "$n" > /dev/null
+				ffmpeg -ss $rand -i "$i" -vf "bwdif,scale=852:480" -frames:v 1 -y "$salemfolder/thumbs/${file%.*}-$rand.jpg" 2> /dev/null
+			done
+		fi
+		
+	else
+		echo "$i Does not exist!!! "
+	fi
+done

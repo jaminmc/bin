@@ -1,0 +1,13 @@
+#!/bin/bash
+srcdir="$(pwd)"
+for i in "$@"; do 
+        if [ -d "$i" ]; then
+                cd "$i" || return
+                rename s/-.*/.mpg/ ./*.mpg
+                cd "$srcdir" || return
+        elif [ -e "$i" ] && [ "${i: -4}" == ".mpg" ]; then
+                rename s/-.*/.mpg/  "$i"
+        else
+                echo "$i is not a folder, or .mpg file!"
+        fi
+done

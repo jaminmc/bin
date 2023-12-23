@@ -1,0 +1,6 @@
+#!/bin/bash
+cd /tmp
+rm -rf chromedriver-mac-arm64*
+wget $(curl https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json | jq -r '.channels.Stable.downloads.chromedriver[] | select(.platform == "mac-arm64") | .url')
+unzip chromedriver-mac-arm64.zip 
+mv chromedriver-mac-arm64/chromedriver /opt/homebrew/bin/chromedriver

@@ -1,0 +1,20 @@
+#!/bin/bash
+if [ ! -d "$1" ]; then
+    echo "Must specify a folder!"
+    exit 1
+fi
+folder="$(realpath "$1")"
+
+# cd "$folder" || { echo "Cant get into foler!" ; exit 1 ; }
+
+for csvfile in "$folder/"*.csv; do
+    if [[ "$(file "$csvfile")" == *"UTF-16, little-endian"* ]]; then
+        filename="$(basename "$csvfile")"
+        [ -d "$folder/csv16le" ] || mkdir -p "$folder/csv16le"
+        mv "$csvfile" "$folder/csv16le/"
+        iconv -f utf-16le -t utf-8 "$folder/csv16le/$filename" >"$csvfile"
+        echo "$csvfile converted to utf-8"
+    else
+        echo "Skipping $csvfile, as it is not utf-16le"
+    fi
+done

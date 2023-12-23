@@ -1,0 +1,58 @@
+#!/bin/bash
+month=$(gdate -dnext-monday +%m)
+next_monday=$(gdate -d "next Monday" +'%Y-%m-%d')
+day_of_month=$(gdate -d "$next_monday" +'%d')
+week_of_month=$(( (day_of_month - 1) / 7 + 1 ))
+weeknum=$(printf "%02d\n" $week_of_month)
+week=$month-$weeknum
+
+if [ -n "$1" ]; then
+	if [ -d "$1" ]; then
+		nextweekfolder="$(realpath "$1")"
+		week="$(basename "$nextweekfolder")"
+	elif [ -d "/Volumes/pijn/PIJN/Distro/$1" ]; then
+		nextweekfolder="/Volumes/pijn/PIJN/Distro/$1"
+		week="$1"
+	else
+		nextweekfolder="/Volumes/pijn/PIJN/Distro/$week"
+	fi
+else
+	nextweekfolder="/Volumes/pijn/PIJN/Distro/$week"
+fi
+dailytext='{\rtf1\ansi\ansicpg1252\cocoartf2709
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fnil\fcharset0 HelveticaNeue;}
+{\colortbl;\red255\green255\blue255;\red255\green255\blue255;\red53\green134\blue255;\red0\green0\blue0;
+\red210\green145\blue15;}
+{\*\expandedcolortbl;;\cssrgb\c100000\c100000\c100000;\cssrgb\c25490\c61176\c100000;\cssrgb\c0\c0\c0;
+\cssrgb\c86275\c63137\c5098;}
+\deftab720
+\pard\pardeftab720\partightenfactor0
+
+\f0\fs26 \cf0 \expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Weekly shows have been uploaded to all the networks I upload to and are available on the FTP server now!\
+\
+Notice that there are now two folders on the FTP site for each week. There is a Daily folder and a Weekly folder for those that are only airing one show a week.\
+Next week is located in {\field{\*\fldinst{HYPERLINK "ftp://pijnnews:GodBlessYou@pijn.zakarmedia.com/PIJN/REPLACEWEEK/Weekly"}}{\fldrslt \cf3 \ul \ulc3 \strokec3 /PIJN/REPLACEWEEK/Weekly}}\
+\
+\
+Note: There is now a Tags/keywords section in the metadata. Use them if you want to or have a use for them.\
+\
+\
+This FTP server has the master files with the captions embedded. FTP info:\
+\
+\pard\pardeftab720\partightenfactor0
+\cf4 \strokec4 Server: {\field{\*\fldinst{HYPERLINK "ftp://pijnnews:GodBlessYou@pijn.zakarmedia.com/PIJN/REPLACEWEEK/Weekly"}}{\fldrslt \cf3 \ul \ulc3 \strokec3 pijn.zakarmedia.com}}\cf5 \strokec5 \
+\pard\pardeftab720\partightenfactor0
+\cf0 \strokec2 User: pijnnews\
+Pass: GodBlessYou\
+\
+\
+\
+\
+}'
+# shellcheck disable=SC2001
+sed "s/REPLACEWEEK/$week/g" <<<"$dailytext" >/tmp/weekly.rtf
+
+textutil -cat rtf /tmp/weekly.rtf "$nextweekfolder/Weekly/"*.txt -output /tmp/weeklyemail.rtf
+< /tmp/weeklyemail.rtf pbcopy
+open "$nextweekfolder/Weekly/"

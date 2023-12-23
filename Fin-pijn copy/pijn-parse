@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+import pandas as pd
+from datetime import datetime
+from datetime import timedelta
+import getopt
+import sys
+from pathlib import Path
+import argparse
+import os
+
+
+def parseExcel(excelfile, videofile):
+    df = pd.DataFrame(pd.read_excel(excelfile))
+    for index, row in df.iterrows():
+        if videofile in row['Filename']:
+            return(row)
+
+
+def parseByFile(filename, data):
+    pass
+
+
+def main(argv):
+
+    my_parser = argparse.ArgumentParser(
+        description='Get Info from Excel for filename')
+    my_parser.add_argument('ExcelFile',
+                           metavar='ExcelFile',
+                           type=str,
+                           help='The Excell file with the PIJN Info')
+    my_parser.add_argument('VideoFile',
+                           metavar='VideoFile',
+                           type=str,
+                           help='The Video File')
+    my_parser.add_argument('-d',
+                           '--description',
+                           action='store_true',
+                           help='Print Description')
+    my_parser.add_argument('-t',
+                           '--title',
+                           action='store_true',
+                           help='Print Title')
+    argp = my_parser.parse_args()
+
+    # if os.path.exists(argp.VideoFile):
+    # vidfile = Path(argp.VideoFile).stem
+    # else:
+    # print(f"Video file {argp.VideoFile} does not exist!")
+    vidfile = Path(argp.VideoFile).stem
+
+    if not os.path.exists(argp.ExcelFile):
+        sys.exit(f"Excel file {argp.ExcelFile} does not exist!")
+    # print(f'Excel File: {argp.ExcelFile}\nVideo Filename: {vidfile}')
+    data = parseExcel(argp.ExcelFile, vidfile)
+    # print(f'Data: {data}')
+    title = data['Episode Title (100 Char Max)'].strip()
+    description = data['Episode Description'].strip()
+
+    if argp.title:
+        print(title)
+    elif argp.description:
+        print(description)
+    else:
+        print(f'Title:\n{title}\n\nDescription:\n{description}')
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

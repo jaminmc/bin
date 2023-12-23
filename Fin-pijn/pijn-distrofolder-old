@@ -1,0 +1,49 @@
+#!/bin/bash
+if [ -d "/Volumes/Storage/PIJN/$1/youtube" ]; then
+  Inis="$(realpath "/Volumes/Storage/PIJN/$1")"
+elif [ ! -d "$1/youtube" ]; then
+  echo "Need Input folder!!!!"
+  exit 1
+else
+  Inis="$(realpath "$1")"
+fi
+
+Distro="${Inis}/Distro"
+excel=$( ls -1 "$Inis/"*.xlsx 2>/dev/null | gwc -l )
+text=$( ls -1 "$Inis/"*.txt 2>/dev/null | gwc -l )
+# echo "Excel: $excel"
+# echo "Text: $text"
+if [[ $excel != 0 ]]; then
+  for e in "$Inis/"*.xlsx; do
+    if [[ $e != *"~$"* ]]; then
+      if [[ $text = 0 ]]; then
+        echo "No text file exists! Making one."
+        # for x in "$Inis/"*.xlsx; do
+          pijn-excel2txt "$e"
+        # done
+      fi
+      [ -d "${Distro}" ] || mkdir -p "${Distro}/MP4/"{1080p60,720p30}
+      ln "$e" "${Distro}/"
+    else
+      echo "Skipping $e"
+    fi
+  done
+
+
+else
+  echo "No Excel file!!!! Continuing in 5 seconds!!!!"
+  sleep 5
+fi
+if [ -d "$Inis" ] && [ -d "${Inis}/youtube" ]; then
+  [ -d "${Distro}" ] || mkdir -p "${Distro}/MP4/"{1080p60,720p30}
+  for x in "${Inis}/youtube/"*.mp4; do
+    ln "$x" "${Distro}/MP4/1080p60/"
+  done
+  for x in "${Inis}/salem/"*.mp4; do
+    ln "$x" "${Distro}/MP4/720p30/"
+  done
+  for x in "${Inis}/Captioned/"*.mpg; do
+    ln "$x" "${Distro}/"
+  done
+  cp -r "$Inis/"*.txt "$Inis/thumbs" "${Inis}/salem/mp3" "$Inis/Captions" "$Distro/"
+fi

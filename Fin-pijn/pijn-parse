@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+import pandas as pd
+import sys
+import argparse
+from pathlib import Path
+import os
+
+def parse_excel(excel_file, video_file):
+    """
+    Parses an Excel file and returns the first row that matches a given video file.
+
+    Parameters:
+        excel_file (str): The path to the Excel file.
+        video_file (str): The name of the video file to search for.
+
+    Returns:
+        pandas.Series: The first row of the Excel file that matches the video file.
+    """
+    df = pd.read_excel(excel_file)
+    filtered_df = df[df["Filename"].str.contains(video_file)]
+    return filtered_df.iloc[0]
+
+def main():
+    parser = argparse.ArgumentParser(description="Get information from Excel for a filename")
+    parser.add_argument("ExcelFile", type=str, help="The Excel file with the video information")
+    parser.add_argument("VideoFile", type=str, help="The video file")
+    parser.add_argument("-d", "--description", action="store_true", help="Print description")
+    parser.add_argument("-t", "--title", action="store_true", help="Print title")
+    args = parser.parse_args()
+
+    excel_file_path = args.ExcelFile
+    video_file_name = Path(args.VideoFile).stem
+
+    if not os.path.exists(excel_file_path):
+        sys.exit(f"Excel file {excel_file_path} does not exist!")
+
+    data = parse_excel(excel_file_path, video_file_name)
+    title = data["Episode Title (100 Char Max)"].strip()
+    description = data["Episode Description"].strip()
+
+    if args.title:
+        print(title)
+    elif args.description:
+        print(description)
+    else:
+        print(f"Title:\n{title}\n\nDescription:\n{description}")
+
+if __name__ == "__main__":
+    main()

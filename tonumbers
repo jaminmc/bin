@@ -1,0 +1,18 @@
+#!/usr/bin/env python3
+import re
+
+
+def extract_numbers(input_string):
+    # Use a regular expression to match only digits
+    numbers = re.sub(r"[^0-9]", "", input_string)
+    return numbers
+
+
+# Prompt the user for input
+user_input = input("Enter a string: ")
+
+# Call the function with user input
+result = extract_numbers(user_input)
+
+# Display the result
+print("Numbers extracted:", result)

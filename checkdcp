@@ -16,7 +16,7 @@ cd "$dcp" || exit 1
 for i in Never*/*; do
     goodhash="$(grep "$i" "$Hashfile" | awk '{print $NF}')"
     echo "file $i is expected to be: $goodhash"
-    md5 "$i" | tee -a "$tmphashfile"
+    openssl md5 "$i" | tee -a "$tmphashfile"
     currenthash="$(tail -n1 "$tmphashfile" | awk '{print $NF}')"
     if [[ "$goodhash" == "$currenthash" ]]; then
         echo -e "  IT Passed!! :)\n"
@@ -35,16 +35,18 @@ done
 diff -u "$Hashfile" "$tmphashfile"
 
 if [[ "$failed" = 0 ]]; then
-    echo "$dcp has passed!!!"
+    echo "$dcp has passed!!! $(date)"
     say "$(basename "$dcp") has Passed!"
 else
     echo "$failed files are BAD on $dcp!!!!"
+    say "$failed files are BAD on $dcp!!!!"
     for i in "${failedfiles[@]}"; do
         goodhash="$(grep "$i" "$Hashfile" | awk '{print $NF}')"
-        echo -e "This might fix the broken filr of $i\n\n"
+        say "$i has miss matches!!!"
+        echo -e "This might fix the broken file of $i\n\n"
         echo "rm '$dcp/$i'"
         echo "pv '$masterdcp/$i' > '$dcp/$i'"
-        echo "md5 '$dcp/$i'"
+        echo "openssl md5 '$dcp/$i'"
         echo "Hash should be: $goodhash"
     done
 fi

@@ -1,0 +1,209 @@
+#!/usr/bin/env python3
+import argparse
+# import ftplib
+import json
+# import httpx as requests
+import os
+import sys
+import time
+from datetime import date
+from glob import iglob
+from pathlib import Path
+from pprint import pprint
+
+import pandas as pd
+import requests
+from pymediainfo import MediaInfo
+
+todays_date = date.today()
+thisyear = todays_date.year
+revclientapi = "T0DEkZZ7r3-05sE-OAEi1pmjjN4"
+revuserapi = "0WklAMeEgeu6YZDy5+3DyLNMSDk="
+sandbox = False
+revdict = {}
+revordered = {}
+headers = {'Authorization': 'Rev ' + revclientapi + ':' + revuserapi}
+captionformats = ['SubRip', 'Transcript', 'WebVtt', 'CheetahCap']
+glossary = ['Gordon Klingenschmitt', 'PIJN News', '866-Obey-God',
+            '866-O-B-E-Y-G-O-D', 'MyPillow', 'praynews', 'PrayInJesusName.org']
+
+
+def parseExcel(excelfile, videofile):
+    'This gets info from Excel file'
+    df = pd.DataFrame(pd.read_excel(excelfile))
+    for index, row in df.iterrows():
+        if row['Filename'] == videofile:
+            return(row)
+
+
+def Upload2rev(processfile):
+    'Upload file to Rev.com'
+    url = 'https://www.rev.com/api/v1/inputs'
+    infile = processfile['File']
+    fullfile = str(Path(infile).resolve())
+    fileext = Path(infile).suffix.lower()
+    monthweek = Path(Path(fullfile).parent).name
+    year = Path(Path(fullfile).parent.parent).name
+    try:
+        if int(year) in range(2020, 2030):
+            print(year)
+        else:
+            print(year, 'is not good.')
+            year = str(thisyear)
+            print('Using current year of', thisyear)
+    except ValueError:
+        print(year, 'is not a number')
+        year = str(thisyear)
+        print('Using current year of', thisyear)
+    upload = {}
+    if fileext == ".mp4":
+        upload['content_type'] = 'video/mp4'
+    elif fileext == ".mpg":
+        upload['content_type'] = 'video/mpeg'
+    elif fileext == ".mpeg":
+        upload['content_type'] = 'video/mpeg'
+    upload['filename'] = processfile['Filename']
+    upload['url'] = 'http://pijn.zakarmedia.com:9080/' + \
+        year + '/' + monthweek + '/' + processfile['Filename']
+    print(json.dumps(upload, indent=2))
+    r = requests.post(url, json=upload, headers=headers)
+    if r.headers.get('Location'):
+        uri = r.headers.get('Location')
+        print('Headers:')
+        pprint(r.headers)
+        print('')
+        revdict[processfile['Filename']]['uri'] = uri
+        revdict[processfile['Filename']]['UploadResponce'] = dict(r.headers)
+        return uri
+    else:
+        print('Upload failed!!!!!')
+        pprint(print(r.headers))
+        pprint(r.json())
+
+
+def revorder(revdata, jsonordered):
+    url = 'https://www.rev.com/api/v1/orders'
+    data = {}
+    data['sandbox_mode'] = sandbox
+    data['non_standard_tat_guarantee'] = False
+    data['caption_options'] = {}
+    data['caption_options']['inputs'] = []
+    for file in revdata:
+        currentvid = {}
+        currentvid['video_length_seconds'] = revdata[file]['Seconds']
+        currentvid['uri'] = revdata[file]['uri']
+        currentvid['glossary'] = glossary
+        data['caption_options']['inputs'].append(currentvid)
+
+    data['caption_options']['output_file_formats'] = captionformats
+
+    print(json.dumps(data, indent=2))
+    r = requests.post(url, json=data, headers=headers)
+    if r.headers.get('Location'):
+        uri = r.headers.get('Location')
+        print('Headers:')
+        pprint(r.headers)
+        print('')
+        revordered['Order'] = uri
+        revordered.update(data)
+        revordered['caption_options']['inputs'] = []
+        for file in revdata:
+            currentvid = {}
+            currentvid['Filename'] = revdata[file]
+            currentvid['video_length_seconds'] = revdata[file]['Seconds']
+            currentvid['uri'] = revdata[file]['uri']
+            currentvid['glossary'] = glossary
+            revordered['caption_options']['inputs'].append(currentvid)
+        print(json.dumps(revordered, indent=2))
+        revordered['Headers'] = dict(r.headers)
+        with open(jsonordered, 'w') as dumpjson:
+            json.dump(revordered, dumpjson, indent=2)
+        return uri
+    else:
+        print('Upload failed!!!!!')
+        retheaders = dict(r.headers)
+        print(json.dumps(retheaders, indent=2))
+        pprint(r.json())
+
+
+def main(argv):
+    my_parser = argparse.ArgumentParser(
+        description='Get Info from Excel for filename')
+    my_parser.add_argument('VideoFiles',
+                           metavar='VideoFiles',
+                           nargs='+',
+                           help='The Video File(s)')
+    my_parser.add_argument('-r',
+                           '--rumble',
+                           action='store_true',
+                           help='Only Upload to Rumble')
+    my_parser.add_argument('-l',
+                           '--lightcast',
+                           action='store_true',
+                           help='Only upload to Lightcast')
+    argp = my_parser.parse_args()
+    parsefiles = argp.VideoFiles
+    videofiles = []
+    jsonfile = str(Path(parsefiles[0]).parent) + '/' + 'revupload.json'
+    jsonordered = str(Path(parsefiles[0]).parent) + '/' + 'revordered.json'
+    if os.path.exists(jsonfile):
+        print(f'Loading json {jsonfile} from before, so we can resume.')
+        with open(jsonfile) as json_file:
+            jsondict = json.load(json_file)
+            revdict.update(jsondict)
+    for x in parsefiles:
+        if os.path.exists(x):
+            videofiles.append(x)
+            # print('Adding:', x)
+        else:
+            # print('Deblobbing:', x)
+            for xx in iglob(x):
+                videofiles.append(xx)
+                # print('Adding:', xx)
+
+    for file in videofiles:
+        file = str(Path(file).resolve())
+        filename = Path(file).name
+        if filename not in revdict.keys():
+            media_info = MediaInfo.parse(file)
+            seconds = int(media_info.tracks[0].duration / 1000)
+            minutes = seconds / 60
+            if seconds < 1680:
+                print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+                print(
+                    f'File {filename} is {str(minutes)}, less than 28 minutes!!! SKIPPING!!!')
+                print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+                time.sleep(10)
+            elif seconds > 1715:
+                print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+                print(
+                    f'File {filename} is {str(minutes)}, greater than 28:35!!! SKIPPING!!!')
+                print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+                time.sleep(10)
+            else:
+                minutes = seconds / 60
+                print(
+                    f'File {filename} is {str(minutes)} minutes. Good to go!')
+                revdict[filename] = {'Filename': filename,
+                                     'File': file, 'Seconds': seconds}
+        else:
+            print(revdict[filename])
+        # print(revdict)
+    for filetoprocess in revdict.values():
+        filename = filetoprocess['Filename']
+        file = filetoprocess['File']
+        uri = ""
+        while 'uri' not in filetoprocess:
+            print(f'Uploading {filename} to Rev.com')
+            uri = Upload2rev(filetoprocess)
+            print(f'Added URI of {uri} to {filename}')
+    print('Final Dict:')
+    json_object = json.dumps(revdict, indent=2)
+    with open(jsonfile, 'w') as dumpjson:
+        json.dump(revdict, dumpjson, indent=2)
+    # print(json_object)
+    revorder(revdict, jsonordered)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

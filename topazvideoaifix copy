@@ -1,0 +1,54 @@
+#!/bin/bash
+
+# Declare the default app path
+DEFAULT_APP_PATH="/Applications/Topaz Video AI.app"
+
+# Use '$1' as an alternative app path if specified
+APP_PATH="${1:-$DEFAULT_APP_PATH}"
+missing=0
+
+# Check for required utilities
+for util in "perl" "sudo" "xattr" "codesign"; do
+  command -v "$util" >/dev/null 2>&1 || { echo >&2 "$util is required but not installed. Aborting."; missing=1; }
+done
+
+if [ $missing -eq 1 ]; then
+  echo "Missing required utilities. Most likely you need to install xcode command line tools. run 'xcode-select --install' to install it."
+  exit 1
+fi
+
+# Define hex value sets matched with files
+declare -A HEX_SETS
+
+HEX_SETS["$APP_PATH/Contents/MacOS/login"]=('A3030054' '55000014' '0F8297000000' '660F1F440000' '0F8430060000' 'E93106000000')
+HEX_SETS["$APP_PATH/Contents/Frameworks/libvideoai.1.1.18.dylib"]=('020054200080' '020054000080' 'B0014180' 'B0004180')
+
+
+function hex() {
+  echo "$1" | perl -0777pe 's|([0-9a-zA-Z]{2}+(?![^\(]*\)))|\\x${1}|gs'
+}
+
+function replace() {
+  local file="$1"
+  local hex_set=("${HEX_SETS["$file"[@]}")
+  for ((i = 0; i < ${#hex_set[@]}; i += 2)); do
+    local dom=$(hex "${hex_set[i]}")
+    local sub=$(hex "${hex_set[i + 1]}")
+    sudo perl -0777pi -e 'BEGIN{$/=\1e8} s|'"$dom"'|'"$sub"'|gs' "$file"
+  done
+}
+
+function prep() {
+  # xattr -cr "$1"
+  xattr -r -d com.apple.quarantine "$1"
+  codesign --force --deep --sign - "$1"
+}
+
+function patch() {
+  for file in "${!HEX_SETS[@]}"; do
+    replace "$file"
+  done
+}
+
+patch
+prep "$APP_PATH"

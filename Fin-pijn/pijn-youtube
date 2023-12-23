@@ -1,0 +1,62 @@
+#!/bin/bash
+for i in "$@" ; do
+	if [ -e "$i" ]; then
+		srcfolder="$(cd "$(dirname "$i")"; pwd)" || exit 1
+		file="$(basename "$i")"
+		captions=""
+		timecode="$(mediainfo --Inform="Video;%TimeCode_FirstFrame%" "$i")"
+		[[ $timecode ]] && timecode="-timecode ${timecode/;/.} -r 60000/1001"
+		youtubefolder="$srcfolder/youtube"
+		if [ ! -d "$youtubefolder" ]; then
+			mkdir -p "$youtubefolder"
+		fi
+		if [ -e "$i".scc ]; then
+			captions="$i".scc
+		elif [ -e "$srcfolder/Captions/${file%.*}".scc ]; then
+			captions="$srcfolder/Captions/${file%.*}".scc
+		elif [ -e "$srcfolder/../Captions/${file%.*}".scc ]; then
+			captions="$srcfolder/../Captions/${file%.*}".scc
+		fi
+		# if [[ $captions = "" ]]; then
+		# 	nice -n 20 ffmpeg -i "$i" -map 0:v -map 0:a?  -b:a 320k -metadata xmp= -vf yadif=1:0 -y -pix_fmt yuv420p -loglevel verbose -g 180 -maxrate:v 20M -bufsize:v 20M -aspect 16:9 -c:v libx264 -crf 16 -x264opts ref=4:qpmin=4:colorprim=bt709:transfer=bt709:colormatrix=bt709 -movflags +faststart -preset:v fast "$youtubefolder/${file%.*}".mp4
+		# 	~/bin/pijn-thumbnails.sh "$youtubefolder/${file%.*}".mp4
+		# else
+		# 	nice -n 20 ffmpeg -i "$i" -i "$captions" -map 0:v -map 0:a? -map 1 -b:a 320K -metadata xmp="" -vf yadif=1:0 -y -pix_fmt yuv420p -loglevel verbose -g 180 -maxrate:v 20M -bufsize:v 20M -aspect 16:9 -c:v libx264 -crf 16 -x264opts ref=4:qpmin=4:colorprim=bt709:transfer=bt709:colormatrix=bt709 -c:s mov_text -metadata:s:s:0 language=eng -metadata:s:a:0 language=eng -metadata:s:v:0 language=eng -movflags +faststart -preset:v fast "$youtubefolder/${file%.*}"-cc.m4v
+		# 	~/bin/pijn-thumbnails.sh "$youtubefolder/${file%.*}"-cc.m4v
+		# fi
+
+		# nice -n 20 ffmpeg -i "$i" -map 0:v -map 0:a?  -b:a 320k -metadata xmp= -vf yadif=1:0 -y -pix_fmt yuv420p -loglevel verbose -g 180 -maxrate:v 40M -bufsize:v 30M -aspect 16:9 -c:v libx264 -crf 16 -x264opts ref=4:qpmin=4:colorprim=bt709:transfer=bt709:colormatrix=bt709 -movflags +faststart "$youtubefolder/${file%.*}".mp4
+		ytmov="$youtubefolder/${file%.*}.mov"
+		ytmp4="$youtubefolder/${file%.*}.mp4"
+		ytmp4cc="$youtubefolder/${file%.*}-cc.mp4"
+		if [[ $captions ]]; then
+
+			if [ -e "$ytmp4" ]; then
+				nice -n 20 ffmpeg -i "$ytmp4" -map 0:v -map 0:a -c copy "$ytmov"
+			else
+				echo "nice -n 20 ffmpeg -i \"$i\" -map 0:v -map 0:a? -hide_banner -b:a 320k -metadata xmp=\"\" -vf yadif=1:0,setpts='expr=(PTS-STARTPTS)' -y -pix_fmt yuv420p -loglevel verbose -g 180 -maxrate:v 20M -bufsize:v 20M -aspect 16:9 -c:v libx264 -crf 16 -x264opts ref=4:qpmin=4:colorprim=bt709:transfer=bt709:colormatrix=bt709 -preset:v fast $timecode \"$ytmov\""
+				nice -n 20 ffmpeg -i "$i" -map 0:v -map 0:a? -hide_banner -b:a 320k -metadata xmp="" -vf yadif=1:0,setpts='expr=(PTS-STARTPTS)' -y -pix_fmt yuv420p -loglevel verbose -g 180 -maxrate:v 20M -bufsize:v 20M -aspect 16:9 -c:v libx264 -crf 16 -x264opts ref=4:qpmin=4:colorprim=bt709:transfer=bt709:colormatrix=bt709 -preset:v fast $timecode "$ytmov"
+			fi
+			if [[ $( sed -n 5p "$captions" | cut -c 9) = ";" ]]; then
+				Isdp="df"
+			else
+				Isdp="ndf"
+			fi
+			command1="-tcmode=29.97$Isdp"
+			command2="-command=changetcmode,59.94$Isdp"
+			/Applications/MacCaption.app/Contents/MacOS/MacCaption -omit_reading_preferences_file -movie="$ytmov" $command1 -import=scc -displaymode=caption -ioptions=A1 -input="$captions" $command2 -addtofile=quicktime608 -addtofile_target="$ytmov"
+			# Convert to propper MP4
+			/Applications/GPAC.app/Contents/MacOS/MP4Box -add "$ytmov" -lang 1=Eng -lang 2=eng -lang 3=eng -lang 4=eng -new "$ytmp4cc" #&& rm "$ytmov"
+
+			ls "$youtubefolder/thumbs/${file%.*}"* > /dev/null 2>&1 || ~/bin/pijn-thumbnails.sh "$ytmp4cc"
+
+		else
+
+			nice -n 20 ffmpeg -i "$i" -map 0:v -map 0:a?  -b:a 320k -metadata xmp= -vf yadif=1:0 -pix_fmt yuv420p -loglevel verbose -g 180 -maxrate:v 20M -bufsize:v 20M -aspect 16:9 -c:v libx264 -crf 16 -x264opts ref=4:qpmin=4:colorprim=bt709:transfer=bt709:colormatrix=bt709 -movflags +faststart -preset:v fast $timecode "$ytmp4"
+			ls "$youtubefolder/thumbs/${file%.*}"* > /dev/null 2>&1 || ~/bin/pijn-thumbnails.sh "$ytmp4"
+		fi
+	else
+		echo "$i Does not exist!!! "
+	fi
+done
+# ~/bin/pijn-thumbnails.sh "$youtubefolder/"*.mp4 "$youtubefolder/"*.m4v "$youtubefolder/"*.mov

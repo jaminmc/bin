@@ -1,0 +1,22 @@
+#!/bin/bash
+for in in "$@" ; do
+	if [ -d "$in" ]; then
+		for i in "$in/"*.mpg ; do
+			test=$(mediainfo --Inform="Video;%Duration%" "$i")
+			if [[ $(( test /100/ 60 )) = 285 ]] || [[ $(( test /100/ 60 )) = 284 ]]; then
+				echo "$i os Ok!!"
+			else
+				echo "$i is $(mediainfo --Inform="Video;%Duration/String4%" "$i") - $(( test /100/ 60 ))"
+			fi
+		done
+	else
+		i="$in"
+		test=$(mediainfo --Inform="Video;%Duration%" "$i")
+		if [[ $(( test /100/ 60 )) = 285 ]] || [[ $(( test /100/ 60 )) = 284 ]]; then
+			echo "$i os Ok!!"
+		else
+			echo "$i is $(mediainfo --Inform="Video;%Duration/String4%" "$i") - $(( test /100/ 60 ))"
+		fi
+
+	fi
+done

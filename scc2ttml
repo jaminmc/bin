@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+import sys
+import pycaption
+
+
+def scc_to_vtt(input_file, output_file):
+    with open(input_file, "r", encoding="utf-8") as infile:
+        scc_content = infile.read()
+
+    # Parse SCC content
+    scc_captions = pycaption.SCCReader().read(scc_content)
+
+    # Convert to WebVTT format
+    vtt_captions = pycaption.WebVTTWriter().write(scc_captions)
+
+    with open(output_file, "w", encoding="utf-8") as outfile:
+        outfile.write(vtt_captions)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print("Usage: python script_name.py input_scc_file output_vtt_file")
+    else:
+        input_file = sys.argv[1]
+        output_file = sys.argv[2]
+
+        scc_to_vtt(input_file, output_file)
+        print(f"Conversion complete. VTT file saved as {output_file}")

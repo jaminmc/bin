@@ -1,0 +1,43 @@
+#!/bin/bash
+# captiondir="$(cd "$(dirname "$1")"; pwd)"
+
+# ** This makes sure the prefrence file is compatible.
+if [[ -e /Users/benjamin/Library/Preferences/com.cpc.maccaption.plist ]]; then
+	mv /Users/benjamin/Library/Preferences/com.cpc.maccaption.plist /Users/benjamin/Library/Preferences/com.cpc.maccaption.plist.org
+	# cp /Users/benjamin/bin/com.cpc.maccaption.plist /Users/benjamin/Library/Preferences/com.cpc.maccaption.plist
+fi
+cp /Users/benjamin/bin/com.cpc.maccaption.plist /Users/benjamin/Library/Preferences/com.cpc.maccaption.plist
+
+MakeCaptions () {
+  infile="$1"
+	outfile="${infile%.cap}.scc"
+	if [ -e "$outfile" ] ; then
+		mv "$outfile" "$outfile.org"
+	fi
+	/Applications/MacCaption.app/Contents/MacOS/MacCaption -tcmode=29.97df -import=cheetah_cap -displaymode=caption -input="$infile" -export=scc -inhibit_gui -disablecaptiondatalowestlimit -usesemicolonsinsccfileexport=T -output="$outfile"
+}
+
+
+if [ -d "$1" ]; then
+	isdir=1
+	cd "$1"
+	#statements
+fi
+
+if [[ $isdir = 1 ]]; then
+	for i in "$1"/*.cap; do
+		MakeCaptions "$i"
+	done
+else
+	for i in "$@"; do
+		if [[ "$i" = "${i%.*}.cap" ]]; then
+			MakeCaptions "$i"
+		else
+			echo "$i is not a .cap file!!! Skipping!"
+		fi
+	done
+fi
+if [[ -e /Users/benjamin/Library/Preferences/com.cpc.maccaption.plist.org ]]; then
+	mv /Users/benjamin/Library/Preferences/com.cpc.maccaption.plist.org /Users/benjamin/Library/Preferences/com.cpc.maccaption.plist
+	# cp /Users/benjamin/bin/com.cpc.maccaption.plist /Users/benjamin/Library/Preferences/com.cpc.maccaption.plist
+fi

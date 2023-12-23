@@ -1,0 +1,56 @@
+#!/bin/bash
+if [ ! -e "$1" ]; then
+	echo "Need at least an input video file!!!"
+	exit 1
+fi
+if [[ $2 ]]; then
+	year=$2
+else
+	year=$(gdate "+%Y")
+fi
+
+makeimpact () {
+	captiondir="$(cd "$(dirname "$1")" || exit 1 ; pwd  )"
+	captionmovie="$(basename "$1")"
+	[ -d "$captiondir/Impact" ] || mkdir -p "$captiondir/Impact"
+	orgday=$year$(echo "$captionmovie" | sed -e 's/NRPJN//' -e 's/-.*//')
+	orgweekday=$(gdate -d $orgday "+%a")
+	if [[ $orgweekday = "Mon" ]]; then
+		impactmovie="NRPJN$(gdate -d "$orgday -1 day"  "+%m%d")-$( echo "$captionmovie" | sed -e 's/.*[0-9][0-9][0-9][0-9]-//')"
+
+	elif [[ $orgweekday = "Tue" ]]; then
+		# impactmovie="$captionmovie"
+		impactmovie="NRPJN$(gdate -d "$orgday -2 day"  "+%m%d")-$( echo "$captionmovie" | sed -e 's/.*[0-9][0-9][0-9][0-9]-//')"
+	elif [[ $orgweekday = "Wed" ]]; then
+		impactmovie="NRPJN$(gdate -d "$orgday -3 day"  "+%m%d")-$( echo "$captionmovie" | sed -e 's/.*[0-9][0-9][0-9][0-9]-//')"
+	elif [[ $orgweekday = "Thu" ]]; then
+		impactmovie="NRPJN$(gdate -d "$orgday -4 day"  "+%m%d")-$( echo "$captionmovie" | sed -e 's/.*[0-9][0-9][0-9][0-9]-//')"
+	fi
+	# impactmovie="$captionmovie"
+	captionedmovie="$captiondir/Captioned/$captionmovie"
+	if [ ! -d "$captiondir/GEB/Captioned" ]; then
+		echo "GEB isn't Captioned..."
+		if [ -e "$captiondir/GEB/${captionmovie%.*}-GEB.mpg" ]; then
+			echo "Emhedding captions for you!"
+			pijn-cc "$captiondir/GEB/${captionmovie%.*}-GEB.mpg"
+		else
+			echo "$captiondir/GEB/${captionmovie%.*}-GEB.mpg isn't found!!!! Make sure the file is named right!"
+			# exit 1
+		fi
+	fi
+	GEBmovie="$captiondir/GEB/Captioned/${captionmovie%.*}-GEB.mpg"
+	if [[ -e "$captionedmovie" ]]; then
+		if [[ -e "$GEBmovie" ]]; then
+			ln "$GEBmovie" "$captiondir/Impact/${impactmovie%.*}-non.${impactmovie##*.}"
+			ln "$captionedmovie" "$captiondir/Impact/${impactmovie}"
+			echo "Created $captiondir/Impact/${impactmovie%.*}-non.${impactmovie##*.} and $captiondir/Impact/${impactmovie}"
+		else
+			echo "Missing GEB File. Skipping..."
+			ln "$captionedmovie" "$captiondir/Impact/${impactmovie}"
+		fi
+	else
+		echo "Missing Captioned File. Skipping"
+	fi
+}
+
+	makeimpact "$1"

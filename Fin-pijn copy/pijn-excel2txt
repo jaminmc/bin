@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+
+import argparse
+import os
+# from datetime import datetime
+# from datetime import timedelta
+# import getopt
+import sys
+from pathlib import Path
+
+import pandas as pd
+
+
+def parseExcel(excelfile, videofile):
+    df = pd.DataFrame(pd.read_excel(excelfile))
+    for index, row in df.iterrows():
+        if row['Filename'] == videofile:
+            return(row)
+
+
+def parseExcel2txt(excelfile):
+    df = pd.DataFrame(pd.read_excel(excelfile))
+    filename = str(Path(excelfile).parent) + '/' + \
+        Path(excelfile).stem + '.txt'
+    print(f'Textfile: {filename}')
+    with open(filename, 'w') as f:
+        f.write('_____________________\n')
+        print('_____________________')
+        for index, row in df.iterrows():
+            # print(type(row['Air Date']))
+            if not pd.isna(row['Air Date']):
+                for x in row.keys():
+                    if x == 'Air Date':
+                        t = row[x].strftime("%m-%d-%Y (%a)")
+                        out = (str(f'{x}: {t}'.strip()))
+                        f.write(f'{out}\n')
+                        print(out)
+                    elif x == 'Tags(Keywords) Comma Seperated':
+                        try:
+                            tags = row[x].strip()
+                            tagslist = [word.strip() for word in tags.split(',')]
+                            tagsfromlist = ', '.join([str(x) for x in tagslist])
+                            out = (f'\n\nTags / Keywords: {tagsfromlist}')
+                            # print(f'{x}:\n{row[x]}')
+                            f.write(f'{out}\n')
+                            print(out)
+                        except:
+                            pass
+                    elif x == 'Episode Description':
+                        out = (f'{x}: \n{row[x]}'.strip())
+                        # print(f'{x}:\n{row[x]}')
+                        f.write(f'{out}\n')
+                        print(out)
+                    else:
+                        if 'Unnamed' not in x:
+                            out = (f'{x}: {row[x]}'.strip())
+                            # print(f'{x}:\n{row[x]}')
+                            f.write(f'{out}\n')
+                            print(out)
+                f.write('_____________________\n')
+                print('_____________________')
+
+
+def main(argv):
+
+    my_parser = argparse.ArgumentParser(
+        description='Get Info from Excel for filename')
+    my_parser.add_argument('ExcelFile',
+                           metavar='ExcelFile',
+                           type=str,
+                           help='The Excell file with the PIJN Info')
+    argp = my_parser.parse_args()
+
+    if not os.path.exists(argp.ExcelFile):
+        sys.exit(f"Excel file {argp.ExcelFile} does not exist!")
+    # print(f'Excel File: {argp.ExcelFile}\nVideo Filename: {vidfile}')
+    parseExcel2txt(argp.ExcelFile)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

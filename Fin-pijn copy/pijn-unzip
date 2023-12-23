@@ -1,0 +1,37 @@
+#!/bin/bash
+month=$(gdate -dnext-monday +%m)
+weeknum=$( expr $(gdate -dnext-monday +%V) - $(gdate +%V -d $(gdate -dnext-monday +%Y-%m-01)))
+if [[ $(gdate +%a -d $(gdate -dnext-monday +%Y-%m-01)) = 'Mon' ]]; then
+	((weeknum++))
+fi
+weeknum=$(printf "%02d\n" $weeknum)
+week=$month-$weeknum
+
+Inis="$1"
+if [ -d "$Inis" ]; then
+	cd "$Inis" || exit 1
+elif [ -f "$Inis" ]; then
+	cd "$(dirname "$Inis")" || exit 1
+else
+	echo "$1 Doesn't seem to exist!"
+	echo "Using /Volumes/Storage/PIJN/$week/Captions instead. Press CTRL-C to cancel"
+	sleep 10
+	Inis="/Volumes/Storage/PIJN/$week/Captions"
+	cd "$Inis" || exit 1
+	# exit 1
+fi
+
+# zip=$(ls *.zip 2> /dev/null | wc -l)
+while ( { ls *.zip > /dev/null 2>&1; } ); do
+    for i in *.zip ; do
+        unzip "$i" && rm "$i"
+        # zip=$(ls *.zip 2> /dev/null | wc -l)
+    done
+done
+
+# cap=$(ls *.cap 2> /dev/null | wc -l)
+if ( { ls *.cap > /dev/null 2>&1; } ); then
+    for i in *.cap ; do
+        [ -e "${i%.*}.scc" ] || pijn-cap2scc "$i"
+    done
+fi

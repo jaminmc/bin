@@ -1,0 +1,181 @@
+#!/bin/bash
+month=$(gdate -dnext-monday +%m)
+weeknum=$( expr $(gdate -dnext-monday +%V) - $(gdate +%V -d $(gdate -dnext-monday +%Y-%m-01)))
+if [[ $(gdate +%a -d $(gdate -dnext-monday +%Y-%m-01)) = 'Mon' ]]; then
+	((weeknum++))
+fi
+weeknum=$(printf "%02d\n" $weeknum)
+week=$month-$weeknum
+nextweekfolder="$(realpath "/Volumes/Storage/PIJN/$week")"
+
+pijn-caption () {
+	#!/bin/bash
+	captiondir="$(cd "$(dirname "$1")" || exit 1 ; pwd  )"
+	captionmovie="$(basename "$1")"
+
+	if [ ! -e "$1" ]; then
+		echo "Need at least an input video file!!!"
+		exit 1
+	fi
+	fps=$(mediainfo --Inform="Video;%FrameRate%" "$1" )
+
+	if [ ! -e "$2" ]; then
+		if [ -e "$captiondir/${captionmovie}.scc" ]; then
+			incap="$captiondir/${captionmovie}.scc"
+		elif [ -e "$captiondir/captions/${captionmovie%.*}.scc" ]; then
+			incap="$captiondir/captions/${captionmovie%.*}.scc"
+		elif [ -e "$captiondir/../captions/${captionmovie%.*}.scc" ]; then
+			incap="$captiondir/../captions/${captionmovie%.*}.scc"
+		elif [ -e incap="$captiondir/captions/${captionmovie%_1.*}.scc" ]; then
+			captionmovie="${captionmovie//_1./.}"
+			incap="$captiondir/captions/${captionmovie%.*}.scc"
+		elif [ -e "$captiondir/../captions/${captionmovie%_1.*}.scc" ]; then
+			captionmovie="${captionmovie//_1./.}"
+			incap="$captiondir/../captions/${captionmovie%.*}.scc"
+		elif [ -e "$captiondir/../captions/${captionmovie%-cc.*}.scc" ]; then
+			captionmovie="${captionmovie//-cc./.}"
+			incap="$captiondir/../captions/${captionmovie%.*}.scc"
+
+		elif [ -e "$captiondir/captions/${captionmovie%.*}.mpg.scc" ]; then
+			rename 's/\.mpg\./\./' "$captiondir/captions/"*
+			incap="$captiondir/captions/${captionmovie%.*}.scc"
+		elif [ -e "$captiondir/../captions/${captionmovie%.*}.mpg.scc" ]; then
+			rename 's/\.mpg\./\./' "$captiondir/../captions/"*
+			incap="$captiondir/../captions/${captionmovie%.*}.scc"
+		elif [ -e incap="$captiondir/captions/${captionmovie%_1.*}.mpg.scc" ]; then
+			captionmovie="${captionmovie//_1./.}"
+			rename 's/\.mpg\./\./' "$captiondir/captions/"*
+			incap="$captiondir/captions/${captionmovie%.*}.scc"
+		elif [ -e "$captiondir/../captions/${captionmovie%_1.*}.mpg.scc" ]; then
+			captionmovie="${captionmovie//_1./.}"
+			rename 's/\.mpg\./\./' "$captiondir/../captions/"*
+			incap="$captiondir/../captions/${captionmovie%.*}.scc"
+		elif [ -e "$captiondir/../captions/${captionmovie%-cc.*}.mpg.scc" ]; then
+			captionmovie="${captionmovie//-cc./.}"
+			rename 's/\.mpg\./\./' "$captiondir/../captions/"*
+			incap="$captiondir/../captions/${captionmovie%.*}.scc"
+		else
+			echo "No caption file specified, and $captiondir/captions/${captionmovie%.*}.scc couldn't be found."
+			exit 2
+		fi
+	else
+		incap="$2"
+	fi
+	if [[ $( sed -n 5p "$incap" | cut -c 9) = ";" ]]; then
+		Isdp="df"
+	else
+		Isdp="ndf"
+	fi
+	if [[ ${captiondir##*/} = SD ]]; then
+		echo "Makeing NRB File..."
+		captionmovie="${captionmovie%%-*}.mpg"
+	fi
+
+	if [[ $fps = 59.940 ]]; then
+		# if [[ $(grep '[0-9][0-9];[0-9][0-9]' "$incap" | head -n 1) != "" ]]; then
+		# 	# command1="-command=convert_tc_mode,29.97ndf,29.97df"
+		# 	# command2="-command=changetcmode,59.94ndf"
+		# 	command1="-command=changetcmode,29.97df"
+		# 	command2="-command=convert_tc_mode,29.97ndf,29.97df -command=changetcmode,59.94ndf"
+		# else
+		# 	# command1="-command=changetcmode,59.94ndf"
+		# 	command1="-command=changetcmode,29.97ndf"
+		# 	command2="-command=changetcmode,59.94ndf"
+		# fi
+		# prefile="-tcmode=59.94ndf"
+		command1="-tcmode=29.97$Isdp"
+		#command2="-command=convert_tc_mode,29.97ndf,29.97df -command=changetcmode,59.94$Isdp"
+		# command2="-command=convert_tc_mode,29.97ndf,29.97df -command=changetcmode,59.94ndf"
+		command2="-command=stretchshrink,decrease -command=changetcmode,59.94ndf"
+		# command2="-command=changetcmode,59.94$Isdp"
+
+		if [[ $( echo "$captiondir" | grep -i impact ) != "" ]]; then
+			captionmovie="Dr Gordon $captionmovie"
+		fi
+		echo "Fps is $fps, so Command is: $command1 and $command2"
+		sleep 5
+	else
+		# if [[ $(grep '[0-9][0-9];[0-9][0-9]' "$incap" | head -n 1) != "" ]]; then
+		# 	command1="-command=changetcmode,29.97df"
+		# else
+		# 	command1="-command=changetcmode,29.97ndf"
+		# fi
+		command1="-command=changetcmode,29.97$Isdp"
+
+	fi
+	# if [ ! -e "${incap%.*}.txt" ]; then
+	# 	/Applications/MacCaption.app/Contents/MacOS/MacCaption -import=scc -displaymode=caption -ioptions=A1 -input="$incap" -export=plaintext -output="${incap%.*}.txt"
+	# fi
+	mkdir -p "$captiondir/Captioned"
+	echo "/Applications/MacCaption.app/Contents/MacOS/MacCaption $command1 -import=scc -displaymode=caption -ioptions=A1 -input=\"$incap\" -movie=\"$1\" $command2 -export=mpeg608708 -encode708=A1 -output=\"$captiondir/Captioned/$captionmovie\""
+	sleep 5
+	/Applications/MacCaption.app/Contents/MacOS/MacCaption -omit_reading_preferences_file -movie="$1" $command1 -import=scc -displaymode=caption -ioptions=A1 -input="$incap" $command2 -export=mpeg608708 -encode708=A1 -output="$captiondir/Captioned/$captionmovie"
+}
+if [[ -z $@ ]]; then
+	while true; do
+		echo "No input provided! $nextweekfolder will be used. "
+		read -t 10 -n 1 -p "Do this look correct? (Y/n) " yn
+		yn="${yn:=y}"
+		case $yn in
+				[Yy]* ) break ;;
+				[Nn]* ) echo "Exiting..."; exit 1 ;;
+				* ) echo "Please answer yes or no.";;
+		esac
+	done
+	if [ -d "$nextweekfolder" ]; then
+		echo "Processing Folder $nextweekfolder"
+		for d in "$nextweekfolder"/*.mpg; do
+			pijn-caption "$d"
+		done
+		if [ -d "$nextweekfolder/SD" ]; then
+			for d in "$nextweekfolder/SD"/*.mpg; do
+				pijn-caption "$d"
+			done
+		fi
+		if [ -d "$nextweekfolder/GEB" ]; then
+			for d in "$nextweekfolder/GEB"/*.mpg; do
+				pijn-caption "$d"
+			done
+		fi
+	fi
+else
+	for CapSrc in "$@" ; do
+		if [ -d "$CapSrc" ]; then
+			echo "Processing Folder $CapSrc"
+			for d in "$CapSrc"/*.mpg; do
+				pijn-caption "$d"
+			done
+			if [ -d "$CapSrc/SD" ]; then
+				for d in "$CapSrc/SD"/*.mpg; do
+					pijn-caption "$d"
+				done
+			fi
+			if [ -d "$CapSrc/GEB" ]; then
+				for d in "$CapSrc/GEB"/*.mpg; do
+					pijn-caption "$d"
+				done
+			fi
+		elif [ -e "$CapSrc" ]; then
+			pijn-caption "$CapSrc"
+		elif [ -d "/Volumes/Storage/PIJN/$CapSrc" ]; then
+			CapSrc="/Volumes/Storage/PIJN/$CapSrc"
+			echo "Processing Folder $CapSrc"
+			for d in "$CapSrc"/*.mpg; do
+				pijn-caption "$d"
+			done
+			if [ -d "$CapSrc/SD" ]; then
+				for d in "$CapSrc/SD"/*.mpg; do
+					pijn-caption "$d"
+				done
+			fi
+			if [ -d "$CapSrc/GEB" ]; then
+				for d in "$CapSrc/GEB"/*.mpg; do
+					pijn-caption "$d"
+				done
+			fi
+		else
+			echo "$CapSrc Does not exist!!! "
+		fi
+	done
+
+fi

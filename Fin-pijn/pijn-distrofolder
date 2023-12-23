@@ -1,0 +1,169 @@
+#!/bin/bash
+month=$(gdate -dnext-monday +%m)
+weeknum=$(expr $(gdate -dnext-monday +%V) - $(gdate +%V -d $(gdate -dnext-monday +%Y-%m-01)))
+if [[ $(gdate +%a -d $(gdate -dnext-monday +%Y-%m-01)) = 'Mon' ]]; then
+	((weeknum++))
+fi
+weeknum=$(printf "%02d\n" $weeknum)
+week=$month-$weeknum
+weekly=0
+autoexcel="/Volumes/Storage/PIJN/$week/PIJN-$(gdate -dnext-monday +%m%d)-$(gdate -d 1week-friday +%m%d).xlsx"
+
+while getopts ":w" opt; do
+	case $opt in
+	w)
+		echo "Making weekly"
+
+		weekly=1
+		;;
+	\?)
+		echo "Invalid option: -$OPTARG" >&2
+		exit 1
+		;;
+	esac
+done
+shift $((OPTIND - 1))
+weeklytransfer() {
+	folder="$1"
+	destfolder="$2"
+	orgprefix="$3"
+	NewPrefix="$4"
+	if [ -d "$folder" ]; then
+		for file in "$folder/$orgprefix"*; do
+			if [[ "$file" != "$folder/$orgprefix"\* ]]; then
+				target="$(basename "$file")"
+				target="${target/$orgprefix/$NewPrefix}"
+				if [ -d "$destfolder" ]; then
+					ln "$file" "$destfolder/$target"
+				else
+					echo "Missing Target folder $destfolder"
+					exit 1
+				fi
+
+			fi
+		done
+	else
+		echo "Missing source folder $folder!!!!"
+		exit 1
+	fi
+}
+
+if [[ $weekly = 1 ]] || [[ -f "$1" ]]; then
+	echo "Processing Weekly"
+	if [[ $2 ]]; then
+		echo "Setting year to $2"
+		year=$2
+	else
+		year=$(gdate -dnext-monday "+%Y")
+	fi
+	Inis="$(dirname "$(realpath "$1")")"
+	Distro="${Inis}/Distro/Weekly"
+	echo "Dristo folder is $Distro"
+	[ -d "${Distro}" ] || mkdir -p "${Distro}/MP4/"{1080p60,720p30} "${Distro}/"{thumbs,Captions,mp3}
+	if [ ! -d "$Distro/MP4" ]; then
+		echo "$Distro failed to create!"
+		exit 1
+	fi
+	Showdir="$Inis"
+	Showmovie="$(basename "$1")"
+	orgday=$year$(echo "$Showmovie" | sed -e 's/NRPJN//' -e 's/-.*//')
+	orgweekday=$(gdate -d $orgday "+%a")
+	ShowPrefix="${Showmovie%%-*}"
+	if [[ $orgweekday = "Mon" ]]; then
+		WeeklyShow="NRPJN$(gdate -d "$orgday -1 day" "+%m%d")-$(echo "$Showmovie" | sed -e 's/.*[0-9][0-9][0-9][0-9]-//')"
+
+	elif [[ $orgweekday = "Tue" ]]; then
+		# WeeklyShow="$Showmovie"
+		WeeklyShow="NRPJN$(gdate -d "$orgday -2 day" "+%m%d")-$(echo "$Showmovie" | sed -e 's/.*[0-9][0-9][0-9][0-9]-//')"
+	elif [[ $orgweekday = "Wed" ]]; then
+		WeeklyShow="NRPJN$(gdate -d "$orgday -3 day" "+%m%d")-$(echo "$Showmovie" | sed -e 's/.*[0-9][0-9][0-9][0-9]-//')"
+	elif [[ $orgweekday = "Thu" ]]; then
+		WeeklyShow="NRPJN$(gdate -d "$orgday -4 day" "+%m%d")-$(echo "$Showmovie" | sed -e 's/.*[0-9][0-9][0-9][0-9]-//')"
+	fi
+	WeeklyShowPrefix="${WeeklyShow%%-*}"
+	if [[ -e "$Showdir/Captioned/$Showmovie" ]]; then
+		echo "Weekly Show is: ${WeeklyShow}"
+		ln "$Showdir/Captioned/$Showmovie" "$Distro/${WeeklyShow}"
+	else
+		echo "Missing Captioned File. Skipping"
+	fi
+	weeklytransfer "$Showdir/youtube" "$Distro/mp4/1080p60" "$ShowPrefix" "$WeeklyShowPrefix"
+	weeklytransfer "$Showdir/salem" "$Distro/mp4/720p30" "$ShowPrefix" "$WeeklyShowPrefix"
+	weeklytransfer "$Showdir/salem/mp3" "$Distro/mp3" "$ShowPrefix" "$WeeklyShowPrefix"
+	weeklytransfer "$Showdir/thumbs" "$Distro/thumbs" "$ShowPrefix" "$WeeklyShowPrefix"
+	weeklytransfer "$Showdir/Captions" "$Distro/Captions" "$ShowPrefix" "$WeeklyShowPrefix"
+fi
+
+if [[ ! $Inis ]]; then
+
+	if [ -d "/Volumes/Storage/PIJN/$1/youtube" ]; then
+		Inis="$(realpath "/Volumes/Storage/PIJN/$1")"
+	elif [ ! -d "$1/youtube" ]; then
+		if [ -d "/Volumes/Storage/PIJN/$week/youtube" ]; then
+			Inis="$(realpath "/Volumes/Storage/PIJN/$week")"
+			echo "Using next week of $week as nothing was entered. Press CTRL-C if this is not correct!"
+			sleep 10
+		else
+			echo "Need Input folder!!!!"
+			exit 1
+		fi
+
+	else
+		Inis="$(realpath "$1")"
+	fi
+fi
+
+Distro="${Inis}/Distro/Daily"
+Distrowk="${Inis}/Distro/Weekly"
+NRB="${Inis}/NRB"
+excel=$(ls -1 "$Inis/"*.xlsx 2>/dev/null | gwc -l)
+# text=$( ls -1 "$Inis/"*.txt 2>/dev/null | gwc -l )
+# echo "Excel: $excel"
+# echo "Text: $text"
+[ -d "${Distro}" ] || mkdir -p "${Distro}/MP4/"{1080p60,720p30}
+if [[ $excel != 0 ]]; then
+	for e in "$Inis/"*.xlsx; do
+		if [[ $e != *"~$"* ]]; then
+			if [ ! -f "${e%.xlsx}.txt" ]; then
+				echo "No text file exists! Making one."
+				# for x in "$Inis/"*.xlsx; do
+				pijn-excel2txt "$e"
+				# done
+			fi
+			if [[ "$e" == *wk* ]]; then
+				cp "$e" "${Distrowk}/"
+				cp "${e%.xlsx}.txt" "${Distrowk}/"
+			else
+				cp "$e" "${Distro}/"
+				cp "${e%.xlsx}.txt" "${Distro}/"
+			fi
+
+		else
+			echo "Skipping $e"
+		fi
+	done
+
+else
+	echo "No Excel file!!!! Continuing in 5 seconds!!!!"
+	sleep 5
+fi
+mkdir -p "$NRB"
+for x in "${Inis}/Captioned/"*.mpg; do
+	y="${x##*/}"
+	y="${NRB}/${y%%-*}.mpg"
+	[ -e "$y" ] || ln "$x" "$y"
+done
+cp "/Volumes/Storage/PIJN/$week/PIJN-$(gdate -dnext-monday +%m%d)-$(gdate -d 1week-friday +%m%d).txt" "${NRB}/NRPJN$(gdate -dnext-monday +%m%d)-$(gdate -d 1week-friday +%m%d).txt"
+if [ -d "$Inis" ] && [ -d "${Inis}/youtube" ]; then
+	[ -d "${Distro}" ] || mkdir -p "${Distro}/MP4/"{1080p60,720p30}
+	for x in "${Inis}/youtube/"*.mp4; do
+		ln "$x" "${Distro}/MP4/1080p60/"
+	done
+	for x in "${Inis}/salem/"*.mp4; do
+		ln "$x" "${Distro}/MP4/720p30/"
+	done
+	for x in "${Inis}/Captioned/"*.mpg; do
+		ln "$x" "${Distro}/"
+	done
+	cp -r "$Inis/thumbs" "${Inis}/salem/mp3" "$Inis/Captions" "$Distro/"
+fi

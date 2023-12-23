@@ -31,7 +31,7 @@ salemmp3url = (
 )
 salemuser = "PIJNUser"
 salempass = "Stre@m1ng!"
-rumblesleep = 60
+rumblesleep = 20
 
 rumbleapi = "77c1ff4c4cbe22e175ecbcb336ae5313188eb4b8"
 rumblechannel = 3686280

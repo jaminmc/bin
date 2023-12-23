@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+import argparse
+import ftplib
+import json
+# import httpx as requests
+import os
+import sys
+# from datetime import datetime, timedelta
+from pathlib import Path
+
+import magic
+import pandas as pd
+import requests
+
+rumbleapi = '77c1ff4c4cbe22e175ecbcb336ae5313188eb4b8'
+rumblechannel = 416895
+rumbleurl = 'https://rumble.com/api/simple-upload.php'
+ltaccountId = '628706'
+ltapi = '5MvW8x3owNYp'
+ltchannel = '8303-1074'
+# ftpserver = 'pijn.zakarmedia.com'
+ftpserver = 'testmirror.zakarmedia.com'
+ftpuser = 'pijnnews'
+ftppass = 'GodBlessYou'
+addtolightcastdesc = '\n\nGet free alerts at http://PrayInJesusName.org\n\n\n\n(c) 2021, Chaplain Gordon James Klingenschmitt, PhD.  Airs on NRB TV, Direct TV Ch.378, Roku,  AppleTV, Amazon FireTV, AndroidTV, GoogleTV, Smart TV, iTunes and www.PrayInJesusName.org'
+
+mime = magic.Magic(mime=True)
+
+
+def parseExcel(excelfile, videofile):
+    df = pd.DataFrame(pd.read_excel(excelfile))
+    for index, row in df.iterrows():
+        if row['Filename'] == videofile:
+            return(row)
+
+
+def parseByFile(filename, data):
+    pass
+
+
+def RumbleUpload(data, videofile, logfile):
+    cc = ''
+    thumb = ''
+    files = {'video': videofile}
+    vidpath = str(Path(videofile).parent)
+    vidfile = Path(videofile).stem
+    vidfile = vidfile.replace("-cc", "")
+    if os.path.exists(str(Path(vidpath).parent) + '/Captions/' + vidfile + '.vtt'):
+        cc = str(Path(vidpath).parent) + '/Captions/' + vidfile + '.vtt'
+    elif os.path.exists(str(Path(vidpath).parent) + '/Captions/' + vidfile + '.srt'):
+        cc = str(Path(vidpath).parent) + '/Captions/' + vidfile + '.srt'
+
+    if os.path.exists(vidpath + '/thumbs/' + vidfile + '.jpg'):
+        thumb = vidpath + '/thumbs/' + vidfile + '.jpg'
+    if thumb and cc:
+        files = {'video': videofile, 'cc_en': cc, 'thumb': thumb}
+    elif thumb:
+        files = {'video': videofile, 'thumb': thumb}
+    elif cc:
+        files = {'video': videofile, 'cc_en': cc}
+    # files = tuple(rumblefiles)
+
+    # req = requests.post(rumbleurl, files=files, data=data)
+    # for file in files:
+    #     print(file)
+    # print(f'Data:\n{data}\n\nFiles:\n{files}\n\n')
+    # print(req.json())
+    # with open(vidpath + '/' + vidfile + '.transfered.json', 'w') as outfile:
+    #     json.dump(req.json(), outfile, indent=2)
+    # print(files)
+    print(f'Data:\n{data}\n\nFiles:\n{files}\n\n')
+    rumblefiles = {}
+    for x in data:
+        y = data[x]
+        rumblefiles[x] = (None, y)
+    for x in files:
+        y = files[x]
+        rumblefiles[x] = (Path(y).name, open(y, 'rb'))
+    req = requests.post(rumbleurl, files=rumblefiles)
+    print(req.text)
+    with open(logfile + '-rumble.json', 'w') as outfile:
+        json.dump(req.json(), outfile, indent=2)
+
+
+def lightcastCreate(data, logfile):
+    url = 'https://www.lightcast.com/api/public/v1/archives.php'
+    payload = {'action': 'create', 'accountId': ltaccountId, 'apiKey': ltapi, 'type': 'video',
+               'title': data['title'], 'description': data['description'], 'language': 'en',
+               'assignToChannel': ltchannel}
+    print(payload)
+    req = requests.post(url, data=payload, timeout=(5, 300))
+    with open(logfile + '.ltcreate.json', 'w') as outfile:
+        json.dump(req.json(), outfile, indent=2)
+    print(f'LightCast Create:\n{req.text}\n\n')
+    response = req.json()
+    return(response['media_id'])
+
+
+def lightcastUpload(data, logfile):
+    url = 'https://www.lightcast.com/api/public/v1/archives.php'
+    payload = {'action': 'upload', 'accountId': ltaccountId, 'apiKey': ltapi,
+               'mediaId': data['mediaId'], 'server': ftpserver, 'username': ftpuser,
+               'password': ftppass, 'filepath': data['ltvideopath']}
+    print(payload)
+    req = requests.post(url, data=payload, timeout=(5, 300))
+    print(req.url)
+    with open(logfile + '.ltvideo.json', 'w') as outfile:
+        json.dump(req.json(), outfile, indent=2)
+    print(f'LightCast Video:\n{req.text}\n\n')
+
+
+def lightcastThumb(data, logfile):
+    url = 'https://www.lightcast.com/api/public/v1/archives.php'
+    payload = {'action': 'thumbUpload', 'accountId': ltaccountId, 'apiKey': ltapi, 'mediaId': data['mediaId'],
+               'server': ftpserver, 'username': ftpuser, 'password': ftppass,
+               'filepath': data['ltthumbnail']}
+    print(payload)
+    req = requests.post(url, data=payload, timeout=(5, 300))
+    print(req.url)
+    with open(logfile + '.ltthumb.json', 'w') as outfile:
+        json.dump(req.json(), outfile, indent=2)
+    print(f'LightCast Thumbnail:\n{req.text}\n\n')
+    payload2 = {'action': 'deactivate', 'accountId': ltaccountId,
+                'apiKey': ltapi, 'mediaId': data['mediaId']}
+    req = requests.post(url, data=payload2, timeout=(5, 300))
+
+
+def lightcastSubtitle(data, logfile):
+    url = 'https://www.lightcast.com/api/public/v1/archives.php?action=subtitleUpload'
+    payload = {'action': 'subtitleUpload', 'accountId': ltaccountId, 'apiKey': ltapi,
+               'mediaId': data['mediaId'], 'server': ftpserver, 'username': ftpuser,
+               'password': ftppass, 'language': 'en', 'filepath': data['ltsubtitle']}
+    print(payload)
+    req = requests.post(url, data=payload, timeout=(5, 300))
+    print(req.url)
+    with open(logfile + '.ltsub.json', 'w') as outfile:
+        json.dump(req.json(), outfile, indent=2)
+    print(f'LightCast Subtitle:\n{req.text}\n\n')
+
+
+def lightftpcheck(ftppath):
+    ftp = ftplib.FTP()
+    ftp.connect(ftpserver, 21)
+    ftp.login(ftpuser, ftppass)
+    try:
+        resp = ftp.size(ftppath)
+        print(ftppath, "is", resp, "bytes")
+    except ftplib.error_perm:
+        print(ftppath, "Does not exist!")
+        sys.exit(1)
+    return
+
+
+def main(argv):
+
+    my_parser = argparse.ArgumentParser(
+        description='Get Info from Excel for filename')
+    my_parser.add_argument('ExcelFile',
+                           metavar='ExcelFile',
+                           type=str,
+                           help='The Excell file with the PIJN Info')
+    my_parser.add_argument('VideoFile',
+                           metavar='VideoFile',
+                           type=str,
+                           help='The Video File')
+    my_parser.add_argument('-r',
+                           '--rumble',
+                           action='store_true',
+                           help='Only Upload to Rumble')
+    my_parser.add_argument('-l',
+                           '--lightcast',
+                           action='store_true',
+                           help='Only upload to Lightcast')
+    argp = my_parser.parse_args()
+
+    excelfile = argp.ExcelFile
+    vidsource = argp.VideoFile
+    if os.path.exists(vidsource):
+        vidfilename = Path(vidsource).name
+        videofile = Path(vidsource).stem
+        vidfile = videofile.replace("-cc", "")
+    else:
+        sys.exit(f"Video file {vidsource} does not exist!")
+
+    if not os.path.exists(argp.ExcelFile):
+        sys.exit(f"Excel file {argp.ExcelFile} does not exist!")
+    # print(f'Excel File: {argp.ExcelFile}\nVideo Filename: {vidfile}')
+    monthweek = Path(Path(excelfile).parent).name
+    data = parseExcel(excelfile, vidfile)
+    # print(f'Data: {data}')
+    title = data['Episode Title (100 Char Max)'].strip()
+    description = data['Episode Description'].strip()
+    guid = data['Media ID'].strip()
+    ltvideopath = str('/PIJN/' + str(monthweek) +
+                      '/MP4/1080p60/' + str(vidfilename))
+    ltthumbnail = str('/PIJN/' + str(monthweek) +
+                      '/thumbs/' + str(vidfile) + '.jpg')
+    ltsubtitle = str('/PIJN/' + str(monthweek) +
+                     '/Captions/' + str(vidfile) + '.vtt')
+    logpath = str(Path(excelfile).parent) + '/logs'
+    logfile = logpath + '/' + vidfile
+    print('Logpath:', logpath)
+    print('Logfile:', logfile)
+    if not os.path.exists('logpath'):
+        os.makedirs('logpath')
+
+    rumbledata = {'title': title, 'description': description, 'guid': guid,
+                  'license_type': 6, 'access_token': rumbleapi, 'channel_id': rumblechannel}
+    ltdata = {'title': title, 'description': description + addtolightcastdesc, 'ltvideopath': ltvideopath,
+              'ltthumbnail': ltthumbnail, 'ltsubtitle': ltsubtitle}
+
+    if argp.lightcast:
+        lightftpcheck(ltvideopath)
+        lightftpcheck(ltthumbnail)
+        lightftpcheck(ltsubtitle)
+        ltmediaid = lightcastCreate(ltdata, logfile)
+        if ltmediaid:
+            ltdata['mediaId'] = ltmediaid
+            lightcastUpload(ltdata, logfile)
+            lightcastThumb(ltdata, logfile)
+            lightcastSubtitle(ltdata, logfile)
+    elif argp.rumble:
+        RumbleUpload(rumbledata, vidsource, logfile)
+    else:
+        if ltmediaid:
+            ltmediaid = lightcastCreate(ltdata, logfile)
+            ltdata['mediaId'] = ltmediaid
+            lightcastUpload(ltdata, logfile)
+            lightcastThumb(ltdata, logfile)
+            lightcastSubtitle(ltdata, logfile)
+        RumbleUpload(rumbledata, vidsource, logfile)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

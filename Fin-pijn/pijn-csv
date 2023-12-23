@@ -1,0 +1,25 @@
+#!/bin/bash
+if [ -d "$1" ]; then
+	cd "$1" || exit 1
+	mkdir -p CSV/org Impact Captions SD GEB
+	# touch "${1##*/}.txt"
+	[ -f ../Spots-replace.prproj ] && cp ../Spots-replace.prproj "Spots-replace-${1##*/}.prproj"
+	for i in *.csv; do
+		mv "$i" CSV/org/
+		iconv -f UTF-16LE -t UTF-8 "CSV/org/$i" > "CSV/$i"
+		# mv "$i" "CSV/${i%.*}-ORG.csv"
+	done
+else
+	echo "$1 is not a folder..."
+	if [ -e "$1" ]; then
+		i="$1"
+		cd "$(dirname "$i")" || exit 1
+		[ -f ../Spots-replace.prproj ] && cp ../Spots-replace.prproj "Spots-replace-${1##*/}.prproj"
+		i="$(basename "$i")"
+		mkdir -p CSV/org
+		mv "$i" CSV/org/
+		iconv -f UTF-16LE -t UTF-8 "CSV/org/$i" > "CSV/$i"
+	else
+		exit 1
+	fi
+fi

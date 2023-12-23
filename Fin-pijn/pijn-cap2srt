@@ -1,0 +1,32 @@
+#!/bin/bash
+captiondir="$(cd "$(dirname "$1")"; pwd)"
+
+if [ -d "$1" ]; then
+	isdir=1
+	cd "$1"
+	#statements
+fi
+
+if [[ $isdir = 1 ]]; then
+	for i in "$1"/*.cap; do
+		if [ -e "${i%.*}.srt" ]; then
+			mkdir srt
+			filename="$( basename "$i" )"
+			/Applications/MacCaption.app/Contents/MacOS/MacCaption -omit_reading_preferences_file -tcmode=29.97df -import=cheetah_cap -displaymode=caption -input="$i" -export=subrip_srt -subrip_srt_export_use_styling_tags=T -inhibit_gui -output="srt/${filename%.*}.srt"
+		else
+			/Applications/MacCaption.app/Contents/MacOS/MacCaption -omit_reading_preferences_file -tcmode=29.97df -import=cheetah_cap -displaymode=caption -input="$i" -export=subrip_srt -subrip_srt_export_use_styling_tags=T -inhibit_gui -output="${i%.*}.srt"
+		fi
+
+	done
+else
+	for i in "$@"; do
+		cd $( dirname "$i" )
+		if [ -e "${i%.*}.srt" ]; then
+			mkdir srt
+			filename="$( basename "$i" )"
+			/Applications/MacCaption.app/Contents/MacOS/MacCaption -omit_reading_preferences_file -tcmode=29.97df -import=cheetah_cap -displaymode=caption -input="$i" -export=subrip_srt -subrip_srt_export_use_styling_tags=T -inhibit_gui -output="srt/${filename%.*}.srt"
+		else
+			/Applications/MacCaption.app/Contents/MacOS/MacCaption -omit_reading_preferences_file -tcmode=29.97df -import=cheetah_cap -displaymode=caption -input="$i" -export=subrip_srt -subrip_srt_export_use_styling_tags=T -inhibit_gui -output="${i%.*}.srt"
+		fi
+	done
+fi

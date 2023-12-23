@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+import subprocess
+import argparse
+import os
+import tempfile
+
+def add_scc_captions(input_mpg_file, input_scc_file, output_directory):
+    # Ensure the output directory exists
+    os.makedirs(output_directory, exist_ok=True)
+
+    # Create a temporary file for the EIA-608 captions
+    with tempfile.NamedTemporaryFile(suffix=".eia608", delete=False) as temp_file:
+        temp_eia608_file = temp_file.name
+
+    # Convert SCC to EIA-608
+    subprocess.run(["ccextractor", input_scc_file, "-eia608", "-o", temp_eia608_file])
+
+    # Merge captions with the video
+    output_mpg_with_captions = os.path.join(output_directory, os.path.basename(input_mpg_file))
+    subprocess.run(["ffmpeg", "-i", input_mpg_file, "-vf", f"subtitles={temp_eia608_file}", output_mpg_with_captions])
+
+    # Clean up the temporary EIA-608 file
+    os.remove(temp_eia608_file)
+
+def main():
+    parser = argparse.ArgumentParser(description="Add SCC captions to an MPG video.")
+    parser.add_argument("video_file", help="Input MPG video file")
+    parser.add_argument("caption_file", help="Input SCC caption file")
+    args = parser.parse_args()
+
+    input_mpg_file = args.video_file
+    input_scc_file = args.caption_file
+    output_directory = "captions"
+
+    add_scc_captions(input_mpg_file, input_scc_file, output_directory)
+
+if __name__ == "__main__":
+    main()

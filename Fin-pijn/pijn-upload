@@ -1,0 +1,730 @@
+#!/usr/bin/env python3
+from datetime import datetime
+from datetime import timedelta
+from glob import iglob
+from pathlib import Path
+from pathlib import Path, PurePath
+from pathlib import PurePath
+from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as ec
+from selenium.webdriver.support.ui import WebDriverWait
+from tqdm import tqdm
+import argparse
+import ftplib
+import json
+import logging
+import magic
+import os
+import pandas as pd
+import requests
+import sys
+import time
+import fnmatch
+
+today = datetime.now()
+# Calculate the date of the next Monday
+days_until_next_monday = (7 - today.weekday()) % 7
+next_mon = today + timedelta(days=days_until_next_monday)
+next_tue = next_mon + timedelta(days=1)
+next_wed = next_mon + timedelta(days=2)
+next_thu = next_mon + timedelta(days=3)
+next_fri = next_mon + timedelta(days=4)
+next_sat = next_mon + timedelta(days=5)
+next_sun = next_mon + timedelta(days=6)
+week_of_month = (next_mon.day - 1) // 7 + 1
+month_number = next_mon.strftime("%m")
+week_month = month_number + '-' + str(week_of_month)
+workingdata = {}
+
+brave = 0
+if os.path.isfile("/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"):
+    brave = 1
+    bravepath = "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
+if os.path.isfile("/usr/bin/brave-browser"):
+    brave = 1
+    bravepath = "/usr/bin/brave-browser"
+
+
+logger = logging.getLogger(__name__)
+salemURL = 'https://www.zcastmedia.com/'
+salemvidaddurl = 'https://www.zcastmedia.com/shows/pray-in-jesus-name-1502/broadcasts/add?liveDate='
+salemmp3url = 'https://www.zcastmedia.com/shows/pray-in-jesus-name-1501/broadcasts/add?liveDate='
+salemuser = 'PIJNUser'
+salempass = 'Stre@m1ng!'
+rumblesleep = 60
+
+rumbleapi = '77c1ff4c4cbe22e175ecbcb336ae5313188eb4b8'
+rumblechannel = 416895
+rumbleurl = 'https://rumble.com/api/simple-upload.php'
+
+rumbleuser = 'prayinjesusname'
+rumblepass = 'Justin789$'
+rumblechannelname = 'PrayInJesusNameNews'
+rumbleheadless = False
+ltaccountId = '628706'
+ltapi = '5MvW8x3owNYp'
+ltchannel = '8303-1074'
+# ltftpserver = 'pijn.zakarmedia.com'
+ltftpserver = 'jeeves.zakarmedia.com'
+ltftpuser = 'pijnnews'
+ltftppass = 'GodBlessYou'
+
+addtolightcastdesc = str('\n\nGet free alerts at http://PrayInJesusName.org\n\n\n' +
+                         '© ' + str(datetime.now().year) + ', Chaplain Gordon James Klingenschmitt, PhD.\n' +
+                         'Airs on NRB TV, Direct TV Ch.378, Roku, AppleTV, Amazon FireTV,' +
+                         ' AndroidTV, GoogleTV, Smart TV, iTunes and www.PrayInJesusName.org')
+
+mime = magic.Magic(mime=True)
+
+def is_excel_file(file_path):
+    excel_extensions = ['.xlsx', '.xls']
+    file_extension = os.path.splitext(file_path)[1].lower()
+    return file_extension in excel_extensions
+
+def is_video_file(file_path):
+    video_extensions = ['.mp4', '.avi', '.mkv', '.mov', '.wmv']
+    file_extension = os.path.splitext(file_path)[1].lower()
+    return file_extension in video_extensions
+
+def parse_Excel_Videofile(excelfile, videofile):
+    df = pd.read_excel(excelfile)
+    return df.loc[df['Filename'] == videofile].iloc[0]
+
+def parse_Excel_filenamefromdate(excelfile, airdate):
+    df = pd.read_excel(excelfile)
+    airdateday = airdate.strftime('%Y-%m-%d')
+    matching_row = df[df['Air Date'] == airdateday]
+    return matching_row['Filename'].values[0] if not matching_row.empty else None
+
+
+def salemconnect():
+    options = webdriver.ChromeOptions()
+    options.add_argument("--window-size=1547,1102")
+    driver = webdriver.Chrome(options=options)
+    driver.get(salemURL)
+    time.sleep(3)
+    id_box = driver.find_element(By.ID, 'username')
+    id_box.send_keys(salemuser)
+    pass_box = driver.find_element(By.ID, 'password')
+    pass_box.send_keys(salempass)
+    login_button = driver.find_element(By.CLASS_NAME, 'salem-ui-blue-button')
+    login_button.click()
+    time.sleep(3)
+    return driver
+
+
+def salemvid(driver, data):
+    driver.get(salemvidaddurl + data['airdate'])
+    xpath = "//div[@id='episodeAddUpdate']/ul/li[{}]"
+    time.sleep(3)
+    for i in range(3, 0, -1):
+        driver.find_element(By.XPATH, xpath.format(i)).click()
+        if os.path.exists(data[f'{["trans", "thumb", "srt"][i-1]}']):
+            driver.find_element(By.XPATH, "//input[@type='file']").send_keys(data[f'{["trans", "thumb", "srt"][i-1]}'])
+    driver.find_element(By.XPATH, xpath.format(1)).click()
+    driver.find_element(By.XPATH, "//input[@type='file']").send_keys(data['vidfile'])
+    time.sleep(6)
+    driver.find_element(By.XPATH, "//div[@id='episodeAddUpdate']/ul/li").click()
+    driver.find_element(By.XPATH, "//div[@id='mainView']/div/div/div[2]/input").send_keys(data['title'])
+    time.sleep(2)
+    driver.switch_to.frame(0)
+    driver.find_element(By.ID, "tinymce").send_keys(data['description'])
+    time.sleep(2)
+    driver.switch_to.default_content()
+    driver.find_element(By.XPATH, "//div[@id='mainView']/div[2]/button").click()
+    wait = WebDriverWait(driver, 300)
+    wait.until(ec.visibility_of_element_located((By.XPATH, "//div[@id='episodesCalendar']/table/tbody/tr/td/table/tbody/tr/td[4]/div/a/span")))
+    time.sleep(6)
+
+
+def salemmp3(driver, data):
+    driver.get(salemmp3url + data['airdate'])
+    time.sleep(2)
+    input_file = driver.find_element(By.XPATH, "//input[2]")
+    input_file.send_keys(data['trans'])
+    time.sleep(1)
+    mp3_input = driver.find_element(By.XPATH, "//input[@type='file']")
+    mp3_input.send_keys(data['mp3'])
+    time.sleep(1)
+    title_input = driver.find_element(By.XPATH, "//div[@id='mainView']/div/div/div/div/div[2]/input")
+    title_input.click()
+    title_input.send_keys(data['title'])
+    driver.switch_to.frame(0)
+    description_input = driver.find_element(By.ID, "tinymce")
+    description_input.send_keys(data['description'])
+    time.sleep(2)
+    driver.switch_to.default_content()
+    publish_button = driver.find_element(By.XPATH, "//div[@id='mainView']/div[2]/button")
+    publish_button.click()
+    wait = WebDriverWait(driver, 300)
+    wait.until(ec.visibility_of_element_located((By.XPATH, "//div[@id='episodesCalendar']/table/tbody/tr/td/table/tbody/tr/td[4]/div/a/span")))
+    time.sleep(5)
+
+
+def create_ftp_path(ftp, path):
+    # Split the path into directories
+    dirs = path.split("/")
+    for dir in dirs:
+        try:
+            ftp.mkd(dir)  # Try to create the directory
+        except Exception as e:
+            pass  # Directory already exists or other error occurred
+        ftp.cwd(dir)  # Change to the new directory
+
+def upload_file_to_ftp(ftp, local_file_path, remote_file_path):
+    with open(local_file_path, 'rb') as local_file:
+        ftp.storbinary('STOR ' + remote_file_path, local_file)
+
+def upload_file_to_ftp_if_not_exists(ftp, local_file_path, remote_file_path):
+    if not remote_file_exists(ftp, remote_file_path):
+        create_ftp_path(ftp, os.path.dirname(remote_file_path))
+        upload_file_to_ftp(ftp, local_file_path, remote_file_path)
+
+def remote_file_exists(ftp, remote_file_path):
+    try:
+        ftp.size(remote_file_path)
+        return True
+    except Exception as e:
+        return False
+
+
+
+def rumble_upload(data, videofile, logfile):
+    cc = ''
+    thumb = ''
+    files = {'video': videofile}
+    vidpath = str(Path(videofile).parent)
+    pvid = PurePath(vidpath)
+    if pvid.name == "1080p60":
+        vidpath = str(pvid.parent)
+    vidfile = Path(videofile).stem
+    vidfile = vidfile.replace("-cc", "")
+    captions_path = os.path.join(vidpath, 'Captions')
+    thumbs_path = os.path.join(vidpath, 'thumbs')
+    cc_file = os.path.join(captions_path, vidfile + '.vtt')
+    srt_file = os.path.join(captions_path, vidfile + '.srt')
+    if os.path.exists(cc_file):
+        cc = cc_file
+    elif os.path.exists(srt_file):
+        cc = srt_file
+
+    thumb_file = os.path.join(thumbs_path, vidfile + '.jpg')
+    if os.path.exists(thumb_file):
+        thumb = thumb_file
+    elif os.path.exists(os.path.join(PurePath(vidpath).parent, thumb_file)):
+        thumb = os.path.join(PurePath(vidpath).parent, thumb_file)
+
+    if thumb and cc:
+        files.update({'cc_en': cc, 'thumb': thumb})
+    elif thumb:
+        files.update({'thumb': thumb})
+    elif cc:
+        files.update({'cc_en': cc})
+
+    print(f'Data:\n{data}\n\nFiles:\n{files}\n\n')
+
+    rumblefiles = {key: (Path(value).name, open(value, 'rb'), 'application/octet-stream') for key, value in files.items()}
+
+    new_d = {str(key): str(value) for key, value in data.items()}
+    fields = {**new_d, **rumblefiles}
+    encoder = MultipartEncoder(fields=fields)
+    with tqdm(desc=Path(videofile).stem,
+              total=encoder.len,
+              dynamic_ncols=True,
+              unit='B',
+              unit_scale=True,
+              unit_divisor=1024) as bar:
+        multipart_monitor = MultipartEncoderMonitor(encoder, lambda monitor: bar.update(monitor.bytes_read - bar.n))
+        req = requests.post(rumbleurl, data=multipart_monitor, headers={'Content-Type': multipart_monitor.content_type})
+    print(req.text)
+    with open(logfile + '-rumble.json', 'w') as outfile:
+        json.dump(req.json(), outfile, indent=2)
+    print(f'Rumble Upload:\n{req.text}\n\n')
+    if req.json()['status'] == 0:
+        print("Upload of Video FAILED!!!!")
+        return False
+    else:
+        print("Video Upload Successfull!")
+        return True
+    
+    
+def RumbleUploadNoAPI(data):
+    options = Options()
+    if data["headless"]:
+        options.add_argument("--headless")
+        options.add_argument("--disable-gpu")
+        if brave == 1:
+            options.binary_location = bravepath
+    else:
+        if brave == 1:
+            options.binary_location = bravepath
+    driver = webdriver.Chrome(options=options)
+    driver.set_window_size(1547, 1400)
+    driver.implicitly_wait(2400)
+    driver.get("https://rumble.com/")
+    time.sleep(2)
+    driver.find_element(By.XPATH, "//*/text()[normalize-space(.)='Sign In']/parent::*").click()
+    driver.find_element(By.ID, "login-username").send_keys(data["user"])
+    driver.find_element(By.ID, "login-password").send_keys(data["password"])
+    driver.find_element(By.ID, "login-username").click()
+    driver.find_element(By.ID, "login-password").click()
+    driver.find_element(By.XPATH, "//button[@type='submit']").click()
+    time.sleep(3)
+    driver.find_element(By.XPATH, "(.//*[normalize-space(text()) and normalize-space(.)='View all'])[32]/following::button[3]").click()
+    time.sleep(3)
+    driver.find_element(By.LINK_TEXT, "Upload Video").click()
+    driver.find_element(By.ID, "Filedata").send_keys(data["vidfile"])
+    driver.find_element(By.ID, "title").send_keys(data["title"])
+    if "description" in data:
+        driver.find_element(By.ID, "description").clear().send_keys(data["description"])
+    if "thumbnail" in data:
+        fileinput = driver.find_element(By.ID, "customThumb")
+        driver.execute_script(
+            'arguments[0].style = ""; arguments[0].style.display = "block"; arguments[0].style.visibility = "visible";',
+            fileinput,
+        )
+        driver.find_element(By.ID, "customThumb").send_keys(data["thumbnail"])
+        time.sleep(3)
+    if "tags" in data:
+        driver.find_element(By.ID, "tags").click()
+        driver.find_element(By.ID, "tags").clear()
+        driver.find_element(By.ID, "tags").send_keys(data["tags"])
+    if "channel" in data:
+        try:
+            driver.find_element(By.ID, "channelId").click()
+            dropdown = driver.find_element(By.ID, "channelId")
+            dropdown.find_element(
+                By.XPATH, "//option[. = '" + data["channel"] + "']"
+            ).click()
+        except Exception as e:
+            print(f"Could not set channel. Error: {e}")
+    if "start" in data:
+        try:
+            driver.find_element(
+                By.XPATH, "//fieldset[@id='visibility-options']/div[4]/label"
+            ).click()
+            driver.find_element(By.ID, "scheduler_datetime").click()
+            driver.find_element(By.ID, "scheduler_datetime").clear()
+            driver.find_element(By.ID, "scheduler_datetime").send_keys(
+                data["start"].strftime("%m/%d/%Y - %I:%M %p")
+            )
+            driver.find_element(By.XPATH, "//button[@type='button']").click()
+        except Exception as e:
+            print(f"Could not set Time. Make sure the format was correct.\nError: {e}")
+    time.sleep(1)
+    print("Trying submit upload")
+    element = driver.find_element(By.ID, "submitForm")
+    driver.execute_script("arguments[0].click();", element)
+    time.sleep(1)
+    print("Trying first item 2nd page")
+    driver.find_element(By.XPATH, "//form[@id='form2']/div/div[2]/div[3]/div/a/sub").click()
+    print("Trying second item 2nd page")
+    driver.find_element(By.XPATH, "//form[@id='form2']/div/div[7]/div/label").click()
+    print("Trying third item 2nd page")
+    driver.find_element(By.XPATH, "//form[@id='form2']/div/div[7]/div[2]/label").click()
+    time.sleep(3)
+    print("Trying final click")
+    element = driver.find_element(By.ID, "submitForm2")
+    driver.execute_script("arguments[0].click();", element)
+    print("Waiting for transfer to finish")
+    driver.find_element(By.ID, "direct").click()
+    time.sleep(1)
+    direct = driver.find_element(By.ID, "direct").get_attribute("value")
+    embed = driver.find_element(By.ID, "embed").get_attribute("value")
+    monetized = driver.find_element(By.ID, "monetized").get_attribute("value")
+    print(f"Direct link: {direct}\n\nEmbed: \n{embed}\n\nMonitized:\n{monetized}")
+    driver.quit()
+    return {"direct": direct, "embed": embed, "monetized": monetized}
+
+
+def lightcastCreate(data, logfile):
+    url = 'https://www.lightcast.com/api/public/v1/archives.php'
+    payload = {
+        'action': 'create',
+        'accountId': ltaccountId,
+        'apiKey': ltapi,
+        'type': 'video',
+        'title': data['title'],
+        'description': data['description'],
+        'language': 'en',
+        'assignToChannel': ltchannel
+    }
+    if data['keywords']:
+        payload['keywords'] = data['keywords']
+    print(payload)
+    req = requests.post(url, data=payload, timeout=(5, 300))
+    with open(logfile + '.ltcreate.json', 'w') as outfile:
+        json.dump(req.json(), outfile, indent=2)
+    print(f'LightCast Create:\n{req.text}\n\n')
+    response = req.json()
+    return response['media_id']
+
+
+
+def lightcastUpload(data, logfile):
+    url = 'https://www.lightcast.com/api/public/v1/archives.php'
+    payload = {
+        'action': 'upload',
+        'accountId': ltaccountId,
+        'apiKey': ltapi,
+        'mediaId': data['mediaId'],
+        'server': ltftpserver,
+        'username': ltftpuser,
+        'password': ltftppass,
+        'filepath': data['ltvideopath']
+    }
+    print(payload)
+    req = requests.post(url, data=payload, timeout=(5, 300))
+    print(req.url)
+    with open(logfile + '.ltvideo.json', 'w') as outfile:
+        json.dump(req.json(), outfile, indent=2)
+    print(f'LightCast Video:\n{req.text}\n\n')
+    response = req.json()
+    if response['status'] == 0:
+        print("Upload of Video FAILED!!!!")
+        return False
+    else:
+        print("Video Upload Successfull!")
+        return True
+
+
+import json
+import requests
+
+def lightcastThumb(data, logfile):
+    url = 'https://www.lightcast.com/api/public/v1/archives.php'
+    payload = {
+        'action': 'thumbUpload',
+        'accountId': ltaccountId,
+        'apiKey': ltapi,
+        'mediaId': data['mediaId'],
+        'server': ltftpserver,
+        'username': ltftpuser,
+        'password': ltftppass,
+        'filepath': data['ltthumbnail']
+    }
+    
+    req = requests.post(url, data=payload, timeout=(5, 300))
+    
+    with open(logfile + '.ltthumb.json', 'w') as outfile:
+        json.dump(req.json(), outfile, indent=2)
+    
+    payload2 = {
+        'action': 'deactivate',
+        'accountId': ltaccountId,
+        'apiKey': ltapi,
+        'mediaId': data['mediaId']
+    }
+    
+    req = requests.post(url, data=payload2, timeout=(5, 300))
+
+
+def lightcastSubtitle(data, logfile):
+    url = 'https://www.lightcast.com/api/public/v1/archives.php'
+    payload = {
+        'action': 'subtitleUpload',
+        'accountId': ltaccountId,
+        'apiKey': ltapi,
+        'mediaId': data['mediaId'],
+        'server': ltftpserver,
+        'username': ltftpuser,
+        'password': ltftppass,
+        'language': 'en',
+        'filepath': data['ltsubtitle']
+    }
+    response = requests.post(url, data=payload, timeout=(5, 300))
+    with open(logfile + '.ltsub.json', 'w') as outfile:
+        json.dump(response.json(), outfile, indent=2)
+    print(f'LightCast Subtitle:\n{response.text}\n\n')
+
+def detect_excel():
+    next_excel_detect = '/Volumes/Storage/PIJN/' + week_month +'/PIJN-'+ next_mon.strftime('%m%d') + '-' + next_fri.strftime('%m%d') + '.xlsx'
+    if os.path.exists(next_excel_detect):
+        return next_excel_detect
+    return None
+
+import ftplib
+
+def lightftpcheck(ftppath):
+    with ftplib.FTP() as ftp:
+        ftp.connect(ltftpserver, 21)
+        ftp.login(ltftpuser, ltftppass)
+        try:
+            resp = ftp.size(ftppath)
+            print(f"{ftppath} is {resp} bytes")
+        except ftplib.error_perm:
+            print(f"{ftppath} Does not exist!")
+            # sys.exit(1)
+        return resp
+
+def process_args(argv):
+    my_parser = argparse.ArgumentParser(
+        description='Get Info from Excel for filename')
+    my_parser.add_argument('ExcelFile',
+                           metavar='ExcelFile',
+                           type=str,
+                           help='The Excell file with the PIJN Info')
+    my_parser.add_argument('videofiles',
+                           metavar='videofiles',
+                           nargs='+',
+                           help='The Video File(s)')
+    my_parser.add_argument('-r',
+                           '--rumble',
+                           action='store_true',
+                           help='Only Upload to Rumble')
+    my_parser.add_argument('-l',
+                           '--lightcast',
+                           action='store_true',
+                           help='Only upload to Lightcast')
+    my_parser.add_argument('-s',
+                           '--salem',
+                           action='store_true',
+                           help='Only upload to salem')
+    my_parser.add_argument('-a',
+                           '--all',
+                           action='store_true',
+                           help='Upload to all!')
+    argp = my_parser.parse_args()
+    
+    if argp.all:
+        argp.lightcast = True
+        argp.rumble = True
+        argp.salem = True
+        
+    workingdata['videofiles'] = []
+    try:
+        if os.path.exists(argp.ExcelFile):
+            if is_excel_file(argp.ExcelFile):
+                workingdata['excelfile'] = Path(argp.ExcelFile).absolute() 
+            elif is_video_file(argp.ExcelFile):
+                workingdata['videofiles'].append(Path(argp.ExcelFile).absolute())
+            else:
+                print("File is not a video or excel file")
+                sys.exit(1)
+    except:
+        pass
+    
+    if argp.videofiles:
+        parsefiles = argp.videofiles
+        for x in parsefiles:
+            if os.path.exists(x):
+                if is_excel_file(x):
+                    workingdata['excelfile'] = Path(x).absolute() 
+                elif is_video_file(x):
+                    workingdata['videofiles'].append(Path(x).absolute())
+                else:
+                    print("File is not a video or excel file")
+                    sys.exit(1)
+            else:
+                # print('Deblobbing:', x)
+                for xx in iglob(x):
+                    if os.path.exists(xx):
+                        if is_excel_file(xx):
+                            workingdata['excelfile'] = Path(xx).absolute() 
+                        elif is_video_file(xx):
+                            workingdata['videofiles'].append(Path(xx).absolute())
+                        else:
+                            print("File is not a video or excel file")
+                            sys.exit(1)
+    else:
+        print("No Video Files! Lets get them from Excel!")
+        
+    if not workingdata['excelfile']:
+        if detect_excel():
+            workingdata['excelfile'] = detect_excel()
+        else:
+            print("Excel file does not exist!")
+            sys.exit(1)
+    
+    if workingdata['videofiles'] == []:
+        print("No Video Files! Lets get them from Excel!")
+        filenames = [parse_Excel_filenamefromdate(next_mon),
+                     parse_Excel_filenamefromdate(next_tue),
+                     parse_Excel_filenamefromdate(next_wed),
+                     parse_Excel_filenamefromdate(next_thu)]
+        paths = ['/Volumes/Storage/PIJN/'+week_month+'/PIJN-'+ '/Distro/Daily/'+filename + '.mpg'
+                 for filename in filenames]
+        for path in paths:
+            if os.path.exists(path):
+                workingdata['videofiles'].append(path)
+        
+    return argp
+
+
+def get_meta_date_for_filenames():
+    for file in workingdata['videofiles']:
+        vidsource = file
+        videofile = Path(vidsource).stem
+        vidfile = videofile.replace("-cc", "")
+        workingdata[f'file_{vidfile}'] = {}
+        workingdata[f'file_{vidfile}']['vidfile'] = vidfile
+        workingdata[f'file_{vidfile}']['vidsource'] = vidsource
+        excelfile = workingdata['excelfile']
+        excelpath = str(Path(excelfile).parent)
+        workingdata[f'file_{vidfile}']['mainfolder'] = excelpath
+        mainfolder = excelpath
+        monthweek = Path(PurePath(excelfile).parents[2]).name
+        if monthweek in ['Daily', 'Weekly']:
+            monthweek = Path(PurePath(excelfile).parents[2]).name
+        vid1080p = None
+        for path in [
+            f"{mainfolder}/Distro/Daily/MP4/1080p60/{vidfile}-cc.mp4",
+            f"{mainfolder}/Distro/Daily/MP4/1080p60/{vidfile}.mp4",
+            f"{mainfolder}/MP4/1080p60/{vidfile}-cc.mp4",
+            f"{mainfolder}/MP4/1080p60/{vidfile}.mp4"
+        ]:
+            if os.path.exists(path):
+                vid1080p = path
+                break
+        if not vid1080p:
+            raise ValueError('No 1080p file found for ' + vidfile)
+        workingdata[f'file_{vidfile}']['vid1080p'] = vid1080p
+        Excel_data = parse_Excel_Videofile(excelfile, vidfile)
+        title = Excel_data['Episode Title (100 Char Max)'].strip()
+        workingdata[f'file_{vidfile}']['title'] = title
+        description = Excel_data['Episode Description'].strip()
+        workingdata[f'file_{vidfile}']['description'] = description
+        tags = Excel_data.get('Tags(Keywords) Comma Seperated', None)
+        workingdata[f'file_{vidfile}']['tags'] = tags
+        if tags:
+            tagslist = [word.strip() for word in tags.split(',')]
+            workingdata[f'file_{vidfile}']['tagslist'] = tagslist
+            tagsfromlist = ','.join([str(x) for x in tagslist])
+            workingdata[f'file_{vidfile}']['tagsfromlist'] = tagsfromlist
+        guid = time.strftime("%Y") + Excel_data['Media ID'].strip()
+        workingdata[f'file_{vidfile}']['guid'] = guid
+        ltvideopath = f"/PIJN/{monthweek}/MP4/1080p60/{vidfile}-cc.mp4"
+        ltthumbnail = f"/PIJN/{monthweek}/thumbs/{vidfile}.jpg"
+        ltsubtitle = f"/PIJN/{monthweek}/Captions/{vidfile}.vtt"
+        logpath = excelpath + '/logs'
+        if 'Distro' in logpath:
+            logpath = str(PurePath(excelpath).parents[1]) + '/logs'
+        logfile = logpath + '/' + vidfile
+        workingdata[f'file_{vidfile}']['logfile'] = logfile
+        workingdata[f'file_{vidfile}']['ltvideopath'] = ltvideopath
+        workingdata[f'file_{vidfile}']['ltthumbnail'] = ltthumbnail
+        workingdata[f'file_{vidfile}']['ltsubtitle'] = ltsubtitle
+        if not os.path.exists(logpath):
+            os.makedirs(logpath)
+        if tagsfromlist:
+            workingdata[f'file_{vidfile}']['rumbledata'] = {'title': title, 'description': description, 'guid': guid,
+                            'license_type': 6, 'access_token': rumbleapi, 'channel_id': rumblechannel, 'tags': tagsfromlist}
+        else:
+            workingdata[f'file_{vidfile}']['rumbledata'] = {'title': title, 'description': description, 'guid': guid,
+                            'license_type': 6, 'access_token': rumbleapi, 'channel_id': rumblechannel}
+        
+
+def main(argv):
+    global rumblesleep
+    argp=process_args(argv)
+    
+    print("Testing Metadata...")
+    get_meta_date_for_filenames()
+    if argp.salem:
+        salemdriver = salemconnect()
+
+    for file in workingdata['videofiles']:
+        good = False
+        if argp.lightcast:
+            good = True
+            lightftpcheck(ltvideopath)
+            lightftpcheck(ltthumbnail)
+            lightftpcheck(ltsubtitle)
+            ltmediaid = lightcastCreate(ltdata, logfile)
+            if ltmediaid:
+
+                try:
+                    ltdata['mediaId'] = ltmediaid
+                    ltuploaded = lightcastUpload(ltdata, logfile)
+                    if ltuploaded:
+                        lightcastThumb(ltdata, logfile)
+                        lightcastSubtitle(ltdata, logfile)
+                except Exception as e:
+                    print('Uploading to Lightcast FAILED!')
+                    logger.exception(e)
+
+        if argp.salem:
+            good = True
+            global rumblesleep
+            rumblesleep = 5
+            # print('lets go!')
+            salemdata = {}
+            salemdata['title'] = title
+            salemdata['description'] = description
+            salemdata['airdate'] = Excel_data['Air Date'].strftime("%Y-%m-%d")
+            salemdata['thumb'] = mainfolder + '/salem/thumbs/' + vidfile + '.jpg'
+            salemdata['trans'] = mainfolder + '/salem/Transcripts/' + vidfile + '.pdf'
+            salemdata['srt'] = mainfolder + '/Captions/' + vidfile + '.srt'
+            if os.path.exists(mainfolder + '/salem/' + vidfile + '-cc.mp4'):
+                salemdata['vidfile'] = mainfolder + '/salem/' + vidfile + '-cc.mp4'
+            elif os.path.exists(mainfolder + '/salem/' + vidfile + '.mp4'):
+                salemdata['vidfile'] = mainfolder + '/salem/' + vidfile + '.mp4'
+            elif os.path.exists(mainfolder + '/MP4/720p30/' + vidfile + '-cc.mp4'):
+                salemdata['vidfile'] = mainfolder + '/MP4/720p30/' + vidfile + '-cc.mp4'
+            elif os.path.exists(mainfolder + '/MP4/720p30/' + vidfile + '.mp4'):
+                salemdata['vidfile'] = mainfolder + '/MP4/720p30/' + vidfile + '.mp4'
+            else:
+                sys.exit("Salem Video File does not exist!")
+            if os.path.exists(mainfolder + '/salem/mp3/' + vidfile + '.mp3'):
+                salemdata['mp3'] = mainfolder + '/salem/mp3/' + vidfile + '.mp3'
+            elif os.path.exists(mainfolder + '/mp3/' + vidfile + '.mp3'):
+                salemdata['mp3'] = mainfolder + '/mp3/' + vidfile + '.mp3'
+            # pprint(salemdata)
+            try:
+                print('Uploading ' + vidfile + 'to Salem Video..')
+                salemvid(salemdriver, salemdata)
+                print('Uploading ' + vidfile + 'to Salem Audio..')
+                salemmp3(salemdriver, salemdata)
+            except Exception as e:
+                print(f'Uploading ' + vidfile + ' to Salem FAILED! Error{e}')
+
+        if argp.rumble:
+            good = True
+            try:
+                if os.path.exists(mainfolder + '/youtube/' + vidfile + '-cc.mp4'):
+                    vid1080p = mainfolder + '/youtube/' + vidfile + '-cc.mp4'
+                elif os.path.exists(mainfolder + '/youtube/' + vidfile + '.mp4'):
+                    vid1080p = mainfolder + '/youtube/' + vidfile + '.mp4'
+                elif os.path.exists(mainfolder + '/MP4/1080p60/' + vidfile + '-cc.mp4'):
+                    vid1080p = mainfolder + '/MP4/1080p60/' + vidfile + '-cc.mp4'
+                elif os.path.exists(mainfolder + '/MP4/1080p60/' + vidfile + '.mp4'):
+                    vid1080p = mainfolder + '/MP4/1080p60/' + vidfile + '.mp4'
+                else:
+                    sys.exit("Rumble Video File does not exist!")
+                thumb = None
+                rumbledata['vidfile'] = vid1080p
+                rumbledata['user'] = rumbleuser
+                rumbledata['password'] = rumblepass
+                rumbledata['channel'] = rumblechannelname
+                rumbledata['start'] = Excel_data['Air Date'] + timedelta(hours=7)
+                rumbledata['headless'] = rumbleheadless
+                if os.path.exists(vidpath + '/thumbs/' + vidfile + '.jpg'):
+                    thumb = vidpath + '/thumbs/' + vidfile + '.jpg'
+                elif os.path.exists(str(Path(vidpath).parent) + '/thumbs/' + vidfile + '.jpg'):
+                    thumb = str(Path(vidpath).parent) + '/thumbs/' + vidfile + '.jpg'
+                if thumb:
+                    rumbledata['thumbnail'] = thumb
+                # RumbleUpload(rumbledata, vid1080p, logfile)
+                print(rumbledata)
+                RumbleUploadNoAPI(rumbledata)
+
+                print(f"Rumble Upload for '{vid1080p}' complete. Sleeping for {rumblesleep} seconds")
+                time.sleep(rumblesleep)
+            except Exception as e:
+                print('Uploading to Rumble FAILED!')
+                logger.exception(e)
+                continue
+
+        if not good:
+            print('No Task added... Run with -h for help')
+
+    if argp.salem:
+        salemdriver.close()
+
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
