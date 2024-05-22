@@ -1,0 +1,35 @@
+#!/bin/bash
+pijnfolder="$(realpath /Volumes/pijn/PIJN)"
+weeknum="$(pijn-weeknum)"
+if [ -n "$1" ]; then
+    weeknum="$1"
+fi
+shows="$pijnfolder/Distro/$weeknum/Daily"
+if [ ! -d "$shows" ]; then
+    echo "No such shows: $shows"
+    exit 1
+fi
+showsfolder="$pijnfolder/Temp/Stream"
+if [ ! -d "$showsfolder" ]; then
+    mkdir -p "$showsfolder"
+fi
+remotefolder="/home/pijn/PIJN/TEMP/Stream"
+showfile="$showsfolder/$weeknum.ts"
+streamfile="$remotefolder/$weeknum.ts"
+if [ -f "$showfile" ] ; then
+    echo "$showfile already exists! Output is now $showsfolder/$weeknum-new.ts."
+    showfile="$showsfolder/$weeknum-new.ts"
+    streamfile="$remotefolder/$weeknum-new.ts"
+fi
+cd "$shows" || exit
+[ -f list.txt ] && rm list.txt
+for i in *.mpg; do echo "file '$i'" >>list.txt; done
+# [ -f "$showfile" ] || ffmpeg -f concat -safe 0 -i list.txt -c:v copy -c:a aac -ar 48k -b:a 192k "$showfile"
+ffmpeg -f concat -safe 0 -i list.txt -map 0:v -map 0:a? -c:a aac -ar 48k -b:a 192k -c:v h264_videotoolbox -b:v 6000k -vf bwdif=1:0 -pix_fmt yuv420p -loglevel verbose -y "$showfile"
+[ -f list.txt ] && rm list.txt
+
+
+echo "Finished!
+to start livestream, run in a screen terminal:
+
+while true ; do ffmpeg -stream_loop 0 -re -i '$streamfile' -c copy -f flv 'rtmp://10.47.22.14:1935/myobs/f62d0d61-5614-4f84-90e8-98412119957a.stream?token=Glory'; sleep 2 ; done"

@@ -1,0 +1,24 @@
+org_ocx_file="/Library/OFX/Plugins/DehancerProMetal_arm64_x86_64_v7.ofx.bundle/Contents/MacOS/DehancerProMetal_arm64_x86_64_v7.ofx"
+ocx_file="/tmp/DehancerProMetal_arm64_x86_64_v7.ofx"
+sudo cp -p "$org_ocx_file" "$ocx_file"
+hex() {
+perl -0777pe 's|([0-9a-zA-Z]{2}+(?![^\(]*\)))|\\x${1}|gs' <<<"$1"
+}
+replace() {
+file="$1"
+dom=$(hex "$2")
+sub=$(hex "$3")
+sudo perl -0777pi -e 'BEGIN{$/=\1e8} s|'"$dom"'|'"$sub"'|gs' "$file" 
+}
+prep() {
+sudo xattr -cr "$ocx_file" 
+sudo xattr -r -d com.apple.quarantine "$ocx_file" 
+sudo codesign --force --sign - "$ocx_file" 
+}
+patch() {
+replace "$ocx_file" '5B5DE900000000554889E5' '5B5DE900000000C34889E5'
+replace "$ocx_file" '000014FFC301D1F6' '000014C0035FD6F6'
+}
+patch
+prep
+sudo mv "$ocx_file" "$org_ocx_file" 

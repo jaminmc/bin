@@ -2,6 +2,7 @@
 month=$(gdate -dnext-monday +%m)
 next_monday=$(gdate -d "next Monday" +'%Y-%m-%d')
 day_of_month=$(gdate -d "$next_monday" +'%d')
+day_of_month=${day_of_month#0}
 week_of_month=$(( (day_of_month - 1) / 7 + 1 ))
 weeknum=$(printf "%02d\n" $week_of_month)
 week=$month-$weeknum

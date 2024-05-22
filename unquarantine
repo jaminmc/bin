@@ -1,0 +1,32 @@
+#!/bin/bash
+
+if [ "$#" -eq 0 ]; then
+    echo "Usage: $0 <file or folder> [<file or folder> ...]"
+    exit 1
+fi
+
+# Loop through each argument
+for file_or_folder in "$@"; do
+    # Remove com.apple.quarantine attribute
+    xattr -rd com.apple.quarantine "$file_or_folder"
+
+    # Show current extended attributes
+    echo "Current extended attributes for $file_or_folder:"
+    xattr -r "$file_or_folder"
+
+    # Check if there are any attributes left and prompt to clear them
+    attributes=$(xattr -r "$file_or_folder")
+    if [ -n "$attributes" ]; then
+        read -p "There are still extended attributes for $file_or_folder. Do you want to clear them? (y/n): " answer
+        if [ "$answer" == "y" ]; then
+            xattr -cr "$file_or_folder"
+            echo "Extended attributes cleared for $file_or_folder."
+        else
+            echo "Extended attributes not cleared for $file_or_folder."
+        fi
+    else
+        echo "No extended attributes found for $file_or_folder."
+    fi
+
+    echo "---------------------------------------------"
+done

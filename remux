@@ -1,0 +1,77 @@
+#!/bin/bash
+
+compress=false
+compress_suffix="hevc-55"
+delete=false
+usage() {
+  echo "Usage: $0 [-c] <input_video1> [<input_video2> ...]"
+}
+
+check_input_files() {
+  if [ "${#input_files[@]}" -eq 0 ]; then
+    usage
+    exit 1
+  fi
+}
+
+while getopts ":c:d" opt; do
+  case ${opt} in
+    c)
+      compress=true
+      ;;
+    d)
+      delete=true
+      ;;
+    \?)
+      echo "Invalid option: $OPTARG" >&2
+      usage
+      exit 1
+      ;;
+  esac
+done
+shift $((OPTIND -1))
+
+declare -a input_files=("$@")
+
+check_input_files
+
+
+for input_file in "${input_files[@]}"; do
+  fps=$(mediainfo --Inform="Video;%FrameRate%" "$input_file")
+  if [ "$fps" = "23.976" ]; then
+    fps="24000/1001"
+  fi
+  if [ "$fps" = "29.97" ]; then
+    fps="30000/1001"
+  fi
+  if ! [ -f "$input_file" ]; then
+    echo "File not found: $input_file" >&2
+    continue
+  fi
+  vcodec=$(mediainfo --Inform="Video;%Format%" "$input_file")
+  tag=""
+  if [ "$vcodec" = "HEVC" ]; then
+    tag="-tag:v hvc1"
+  fi
+  ffbr=""
+  if [[ "$input_file" =~ "Cam3" ]]; then
+    ffbr="-display_rotation 180"
+  fi
+  
+  output_file=$(realpath "$input_file")
+  output_file="${output_file%.*}.mov"
+
+  if [ "$compress" = true ]; then
+    output_file="${output_file%.*}.$compress_suffix.mov"
+    ffmpeg $ffbr -i "$input_file" -map 0:v? -map 0:a?  -c:v hevc_videotoolbox -tag:v hvc1 -q 55 -g 48 -c:a copy "$output_file" && { [ "$delete" = true ] && rm "$input_file"; }
+    echo "Compressed video saved as: $output_file"
+  else
+    if [ -f "$output_file" ]; then
+      output_file="${output_file%.*}.remuxed.mov"
+    fi
+    # shellcheck disable=SC2086
+    ffmpeg $ffbr -i "$input_file" -map 0:v? -map 0:a? $tag -c copy "$output_file" && { [ "$delete" = true ] && rm "$input_file"; }
+    mp4fpsmod -i -r "0:$fps" -x "$output_file"
+    echo "Remuxed video saved as: $output_file"
+  fi
+done

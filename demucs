@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+
+# Default models
+default_models=("htdemucs_ft" "repro_mdx_a" "hdemucs_mmi")
+# default_models=("hdemucs_mmi")
+
+# Function to parse models argument
+parse_models() {
+    IFS=',' read -ra models <<<"$1"
+}
+
+list_models() {
+    echo "Available models:"
+    if . "/Users/benjamin/miniconda3/etc/profile.d/conda.sh"; then
+        conda activate demucs && demucs --list-models
+    else
+        echo "Failed to activate Conda environment."
+        exit 1
+    fi
+}
+
+# Change directory and exit if unsuccessful
+change_directory() {
+    local target_directory="$1"
+    cd "$target_directory" || {
+        echo "Failed to change directory to $target_directory."
+        exit 1
+    }
+}
+
+# Activate Conda environment
+activate_conda() {
+    if . "/Users/benjamin/miniconda3/etc/profile.d/conda.sh"; then
+        conda activate demucs || {
+            echo "Failed to activate Conda environment."
+            exit 1
+        }
+    else
+        echo "Failed to source Conda script."
+        exit 1
+    fi
+}
+
+
+# Run demucs command for each input file and model
+run_demucs() {
+    # local input_file models model
+    for input_file; do
+        for model in "${models[@]:-${default_models[@]}}"; do
+            directory=$(dirname "$input_file")
+            filename=$(basename "$input_file")
+            track="${filename%.*}"
+
+            demucs -n "$model" -o "$directory" -j2 --int24 --filename "{track}/{track}-${model}-{stem}.{ext}" "$input_file" || echo "Failed to process $input_file with model $model."
+            open "$directory/$model/$track"
+        done
+    done
+}
+
+main() {
+    while getopts "m:l" opt; do
+        case $opt in
+            m) parse_models "$OPTARG";;
+            l) list_models; exit 0;;
+            \?) echo "Invalid option: -$OPTARG" >&2; exit 1;;
+        esac
+    done
+    shift $((OPTIND - 1))
+
+    change_directory "$HOME/src/demucs"
+    activate_conda
+    run_demucs "$@"
+}
+
+main "$@"

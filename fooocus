@@ -1,0 +1,6 @@
+#!/bin/bash
+cd ~/src/Fooocus/
+
+# Activate conda environment
+source activate fooocus || { echo "Failed to activate conda environment."; exit 1; }
+python entry_with_update.py --preset realistic --listen 0.0.0.0 

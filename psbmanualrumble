@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# Check if a video file is provided as an argument
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 <video_file> [additional_arguments...]"
+    exit 1
+fi
+
+# Get the absolute path of the input video file
+video_file="$(realpath "$1")"
+
+# Check if the video file exists
+if [ ! -f "$video_file" ]; then
+    echo "Error: Video file not found."
+    exit 1
+fi
+
+# Extract the title from the corresponding .info.cal file
+info_file="${video_file%.*}.info.cal"
+
+# Check if the .info.cal file exists
+if [ ! -f "$info_file" ]; then
+    echo "Error: Info file not found. $info_file"
+    exit 1
+fi
+
+# Extract the second section of the TSV file as the variable "title"
+title=$(awk -F'\t' '{print $2}' "$info_file")
+
+# Extract the thumbnail path from the adjacent video.jpg file
+thumbnail="${video_file%.*}.jpg"
+
+# Check if the thumbnail file exists
+if [ ! -f "$thumbnail" ]; then
+    echo "Error: Thumbnail file not found."
+    exit 1
+fi
+
+# Print the extracted title and thumbnail path
+echo "Title: $title"
+echo "Thumbnail: $thumbnail"
+
+# Shift to ignore the first argument (video_file) and pass the rest to main.py
+shift
+
+# Run the main.py script with the specified arguments
+~/src/RumbleUploadSelenium/main.py "$video_file" -T "$thumbnail" -t "$title" "$@" -c PSBArchives

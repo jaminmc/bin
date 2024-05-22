@@ -1,0 +1,4 @@
+#!/bin/bash
+cd ~/src/audiocraft/ || exit
+source audiocraft/bin/activate
+python -m demos.audiogen_app  --listen "[::]" --inbrowser 

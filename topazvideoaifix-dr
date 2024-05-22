@@ -1,0 +1,25 @@
+#!/bin/bash
+DRplugin_path="/Library/OFX/Plugins/Topaz Video AI.ofx.bundle"
+topaz_file="$DRplugin_path/Contents/MacOS/Topaz Video AI.ofx"
+lib_file="$(readlink -f "$DRplugin_path"/Contents/Frameworks/libvideoai.dylib)"
+hex() {
+perl -0777pe 's|([0-9a-zA-Z]{2}+(?![^\(]*\)))|\\x${1}|gs' <<<"$1"
+}
+replace() {
+file="$1"
+dom=$(hex "$2")
+sub=$(hex "$3")
+sudo perl -0777pi -e 'BEGIN{$/=\1e8} s|'"$dom"'|'"$sub"'|gs' "$file"
+}
+prep() {
+sudo xattr -r -d com.apple.quarantine "$DRplugin_path"
+sudo codesign --force --deep --sign - "$DRplugin_path"
+}
+patch() {
+replace "$topaz_file" '546D960094' '5420008052'           # Arm owned
+replace "$topaz_file" 'E8A57F0200' 'B801000000'           # Intel owned
+replace "$lib_file" '6202005420008052' '6202005400008052' # Arm nowatermark
+replace "$lib_file" 'B0014180' 'B0004180'                 # Intel nowatermark
+}
+patch
+prep
